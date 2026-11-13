@@ -19,6 +19,7 @@ struct ShelfView: View {
         HStack(spacing: 12) {
             FileShareView()
                 .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: 130)
                 .environmentObject(vm)
             panel
                 .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
@@ -69,6 +70,7 @@ struct ShelfView: View {
             .overlay {
                 content
                     .padding()
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .transaction { transaction in
                 transaction.animation = vm.animation
@@ -93,23 +95,74 @@ struct ShelfView: View {
                         .fontWeight(.medium)
                 }
             } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: spacing) {
-                        ForEach(tvm.items) { item in
-                            ShelfItemView(item: item)
-                                .environmentObject(quickLookService)
+                GeometryReader { geo in
+                    ScrollViewReader { proxy in
+                        ZStack {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: spacing) {
+                                    ForEach(Array(tvm.items.enumerated()), id: \.element.id) { index, item in
+                                        ShelfItemView(item: item)
+                                            .environmentObject(quickLookService)
+                                            .id(index)
+                                    }
+                                }
+                                .padding(.horizontal, 2)
+                            }
+                            .scrollIndicators(.never)
+                            .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
+                                handleDrop(providers: providers)
+                            }
+
+                            if isOverflowing(availableWidth: geo.size.width) {
+                                HStack {
+                                    scrollArrow(systemName: "chevron.left") {
+                                        scroll(proxy: proxy, to: 0)
+                                    }
+                                    Spacer()
+                                    scrollArrow(systemName: "chevron.right") {
+                                        scroll(proxy: proxy, to: tvm.items.count - 1)
+                                    }
+                                }
+                                .padding(.horizontal, -4)
+                            }
                         }
                     }
-                }
-                .padding(-spacing)
-                .scrollIndicators(.never)
-                .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
-                    handleDrop(providers: providers)
                 }
             }
         }
         .onAppear {
             ShelfStateViewModel.shared.cleanupInvalidItems()
         }
+    }
+
+    /// Width taken by each shelf item (105 content + 5pt horizontal padding on each side).
+    private let itemWidth: CGFloat = 115
+
+    private func isOverflowing(availableWidth: CGFloat) -> Bool {
+        guard tvm.items.count > 1 else { return false }
+        let contentWidth = CGFloat(tvm.items.count) * itemWidth
+            + CGFloat(tvm.items.count - 1) * spacing
+        return contentWidth > availableWidth
+    }
+
+    private func scroll(proxy: ScrollViewProxy, to index: Int) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(index, anchor: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func scrollArrow(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(width: 20, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.black.opacity(0.55))
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -211,8 +211,16 @@ final class ShelfItemViewModel: ObservableObject {
         ensureContextMenuSelection()
         let menu = NSMenu()
 
-        func addMenuItem(title: String) {
-            let mi = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        // Menu items carry a language-independent action id in representedObject
+        // so the action handler keeps working under any localization (zh, en, ...).
+        func makeMenuItem(titleKey: String, actionID: String) -> NSMenuItem {
+            let mi = NSMenuItem(title: NSLocalizedString(titleKey, comment: ""), action: nil, keyEquivalent: "")
+            mi.representedObject = "action:" + actionID
+            return mi
+        }
+
+        func addMenuItem(titleKey: String, actionID: String) {
+            let mi = makeMenuItem(titleKey: titleKey, actionID: actionID)
             menu.addItem(mi)
         }
 
@@ -231,7 +239,7 @@ final class ShelfItemViewModel: ObservableObject {
         }
 
         if !selectedOpenableURLs.isEmpty {
-            addMenuItem(title: NSLocalizedString("Open", comment: ""))
+            addMenuItem(titleKey: "Open", actionID: "Open")
         }
 
         if !selectedOpenableURLs.isEmpty {
@@ -303,22 +311,22 @@ final class ShelfItemViewModel: ObservableObject {
             menu.addItem(openWith)
         }
 
-        if !selectedFileURLs.isEmpty { addMenuItem(title: NSLocalizedString("Show in Finder", comment: "")) }
+        if !selectedFileURLs.isEmpty { addMenuItem(titleKey: "Show in Finder", actionID: "Show in Finder") }
         // Allow Quick Look for files and link URLs
         if !selectedFileURLs.isEmpty || !selectedLinkURLs.isEmpty {
             // Add Quick Look menu item
-            let quickLookItem = NSMenuItem(title: NSLocalizedString("Quick Look", comment: ""), action: nil, keyEquivalent: "")
+            let quickLookItem = makeMenuItem(titleKey: "Quick Look", actionID: "Quick Look")
             menu.addItem(quickLookItem)
             
             // Add Slideshow as alternate menu item (shown when Option key is held)
-            let slideshowItem = NSMenuItem(title: NSLocalizedString("Quick Look", comment: ""), action: nil, keyEquivalent: "")
+            let slideshowItem = makeMenuItem(titleKey: "Quick Look", actionID: "Quick Look")
             slideshowItem.isAlternate = true
             slideshowItem.keyEquivalentModifierMask = [.option]
             menu.addItem(slideshowItem)
         }
 
         menu.addItem(NSMenuItem.separator())
-        addMenuItem(title: NSLocalizedString("Share…", comment: ""))
+        addMenuItem(titleKey: "Share…", actionID: "Share…")
         
         // Add image processing options for image files grouped under "Image Actions"
         let imageURLs = selectedFileURLs.filter { ImageProcessingService.shared.isImageFile($0) }
@@ -330,18 +338,18 @@ final class ShelfItemViewModel: ObservableObject {
 
             // Remove Background - only for single images
             if imageURLs.count == 1 {
-                let removeBg = NSMenuItem(title: NSLocalizedString("Remove Background", comment: ""), action: nil, keyEquivalent: "")
+                let removeBg = makeMenuItem(titleKey: "Remove Background", actionID: "Remove Background")
                 imageSubmenu.addItem(removeBg)
             }
 
             // Convert Image - only for single images
             if imageURLs.count == 1 {
-                let convertItem = NSMenuItem(title: NSLocalizedString("Convert Image…", comment: ""), action: nil, keyEquivalent: "")
+                let convertItem = makeMenuItem(titleKey: "Convert Image…", actionID: "Convert Image…")
                 imageSubmenu.addItem(convertItem)
             }
 
             // Create PDF - for one or more images
-            let createPDF = NSMenuItem(title: NSLocalizedString("Create PDF", comment: ""), action: nil, keyEquivalent: "")
+            let createPDF = makeMenuItem(titleKey: "Create PDF", actionID: "Create PDF")
             imageSubmenu.addItem(createPDF)
 
             imageActions.submenu = imageSubmenu
@@ -351,24 +359,24 @@ final class ShelfItemViewModel: ObservableObject {
 
         // Add compression option for files/folders (single or multiple)
         if !selectedFileURLs.isEmpty {
-            let compressItem = NSMenuItem(title: NSLocalizedString("Compress", comment: ""), action: nil, keyEquivalent: "")
+            let compressItem = makeMenuItem(titleKey: "Compress", actionID: "Compress")
             menu.addItem(compressItem)
         }
 
-        if selectedItems.count == 1, case .file(_) = item.kind { addMenuItem(title: NSLocalizedString("Rename", comment: "")) }
+        if selectedItems.count == 1, case .file(_) = item.kind { addMenuItem(titleKey: "Rename", actionID: "Rename") }
 
         // Always show "Copy" for all item types
-        addMenuItem(title: NSLocalizedString("Copy", comment: ""))
+        addMenuItem(titleKey: "Copy", actionID: "Copy")
         // If there are file URLs, add "Copy Path" as an alternate menu item (Option key)
         if !selectedFileURLs.isEmpty {
-            let copyPathItem = NSMenuItem(title: NSLocalizedString("Copy Path", comment: ""), action: nil, keyEquivalent: "")
+            let copyPathItem = makeMenuItem(titleKey: "Copy Path", actionID: "Copy Path")
             copyPathItem.isAlternate = true
             copyPathItem.keyEquivalentModifierMask = [.option]
             menu.addItem(copyPathItem)
         }
 
         menu.addItem(NSMenuItem.separator())
-        addMenuItem(title: NSLocalizedString("Remove", comment: ""))
+        addMenuItem(titleKey: "Remove", actionID: "Remove")
 
         let actionTarget = MenuActionTarget(item: item, view: view, viewModel: self)
 
@@ -413,8 +421,6 @@ final class ShelfItemViewModel: ObservableObject {
         }
 
         @MainActor @objc func handle(_ sender: NSMenuItem) {
-            let title = sender.title
-
             if let marker = sender.representedObject as? String, marker == "__OTHER__" {
                 openWithPanel()
                 return
@@ -453,6 +459,16 @@ final class ShelfItemViewModel: ObservableObject {
                 }
                 return
             }
+
+            // Prefer the language-independent action id stored in representedObject.
+            // Fall back to the localized title for any item created elsewhere.
+            let title: String = {
+                if let marker = sender.representedObject as? String,
+                   marker.hasPrefix("action:") {
+                    return String(marker.dropFirst("action:".count))
+                }
+                return sender.title
+            }()
 
             switch title {
             case "Quick Look":
