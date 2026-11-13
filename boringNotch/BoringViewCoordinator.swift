@@ -228,7 +228,9 @@ class BoringViewCoordinator: ObservableObject {
         // 同值重复到达不再发布：原来逐字段赋值会触发 4 次 objectWillChange，
         // 每次都让整棵 ContentView（含已展开的 NotchHomeView、MusicLiveActivity）
         // 重算 body；14 条通知连发时就是 14 次整树重算。只重计时隐藏。
-        let newValue = sneakPeek(show: status, type: type, value: value, icon: icon)
+        // 裸名 sneakPeek 在此同时是模块级 struct 与下方 @Published 属性，
+        // 会被解析为属性而非初始化器，需用模块名限定以构造新值。
+        let newValue = Boring_Notch.sneakPeek(show: status, type: type, value: value, icon: icon)
         if newValue == sneakPeek {
             if status {
                 scheduleSneakPeekHide(after: duration)
