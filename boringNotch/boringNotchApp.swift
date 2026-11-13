@@ -71,9 +71,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func applyDockIconPolicy() {
-        if Defaults[.showDockIcon] {
-            NSApp.setActivationPolicy(.regular)
-        } else {
+        // Only call setActivationPolicy when hiding — switching to .regular
+        // during applicationDidFinishLaunching can interfere with normal
+        // Dock registration. When showDockIcon is true (default), LSUIElement=NO
+        // handles Dock visibility naturally.
+        if !Defaults[.showDockIcon] {
             NSApp.setActivationPolicy(.accessory)
         }
     }
