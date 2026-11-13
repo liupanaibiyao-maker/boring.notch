@@ -177,7 +177,9 @@ struct MusicControlsView: View {
     }
 
     private var lyricsLine: some View {
-        TimelineView(.animation(minimumInterval: 0.25)) { timeline in
+        // Only advance the timeline while playback is running. When paused the
+        // displayed elapsed time is constant, so ticking at 4 Hz is wasted work.
+        TimelineView(.animation(minimumInterval: 0.25, paused: !musicManager.isPlaying)) { timeline in
             let currentElapsed: Double = {
                 guard musicManager.isPlaying else { return musicManager.elapsedTime }
                 let delta = timeline.date.timeIntervalSince(musicManager.timestampDate)
@@ -210,7 +212,9 @@ struct MusicControlsView: View {
     }
 
     private var musicSlider: some View {
-        TimelineView(.animation(minimumInterval: musicManager.playbackRate > 0 ? 0.1 : nil)) { timeline in
+        // The previous `nil` interval meant "every frame" while paused, so an
+        // open but idle notch kept rendering at the display refresh rate.
+        TimelineView(.animation(minimumInterval: 0.1, paused: musicManager.playbackRate <= 0)) { timeline in
             MusicSliderView(
                 sliderValue: $sliderValue,
                 duration: $musicManager.songDuration,

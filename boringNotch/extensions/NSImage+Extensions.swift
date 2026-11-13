@@ -25,8 +25,15 @@ extension NSImage {
                 return
             }
             
-            let width = cgImage.width
-            let height = cgImage.height
+            // Sampling a tiny copy gives the same average colour without
+            // allocating a full-resolution RGBA bitmap and looping over every
+            // pixel of a large album cover.
+            let sourceWidth = cgImage.width
+            let sourceHeight = cgImage.height
+            let maxDimension = 64
+            let scale = min(1.0, CGFloat(maxDimension) / CGFloat(max(sourceWidth, sourceHeight)))
+            let width = max(1, Int(CGFloat(sourceWidth) * scale))
+            let height = max(1, Int(CGFloat(sourceHeight) * scale))
             let totalPixels = width * height
             
             guard let context = CGContext(data: nil,
@@ -42,6 +49,7 @@ extension NSImage {
                 return
             }
             
+            context.interpolationQuality = .low
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
             
             guard let data = context.data else {

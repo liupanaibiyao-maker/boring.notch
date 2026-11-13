@@ -23,22 +23,18 @@ extension Date {
     }
     
     var date: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "dd"
-        return dateFormatter.string(from: self)
+        // A fresh DateFormatter per call is expensive when a calendar grid
+        // re-renders; Date.FormatStyle is a value type with cached sessions.
+        formatted(.dateTime.day(.twoDigits))
     }
     
     var month: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMMM"
-        return dateFormatter.string(from: self)
+        formatted(.dateTime.month(.wide))
     }
     
     func dayOfTheWeek(dayOfWeek: Int) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "EEE"
         let date = Calendar.current.date(bySetting: .weekday, value: dayOfWeek, of: self) ?? self
-        return dateFormatter.string(from: date)
+        return date.formatted(.dateTime.weekday(.abbreviated))
     }
 }
 

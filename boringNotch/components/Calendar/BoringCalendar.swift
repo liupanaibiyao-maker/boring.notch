@@ -172,9 +172,7 @@ struct WheelPicker: View {
     }
 
     private func dateToString(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "E"
-        return formatter.string(from: date)
+        date.formatted(.dateTime.weekday(.abbreviated))
     }
 }
 
