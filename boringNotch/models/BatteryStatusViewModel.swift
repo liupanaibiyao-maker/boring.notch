@@ -127,11 +127,17 @@ class BatteryStatusViewModel: ObservableObject {
         }
     }
 
+    private var notifyTask: Task<Void, Never>?
+
     /// Notifies important changes in the battery status with an optional delay
     /// - Parameter delay: The delay before notifying the change, default is 0.0
     private func notifyImportanChangeStatus(delay: Double = 0.0) {
-        Task {
+        // 一次插拔会扇出电源/充电/低电量多条事件：只保留最后一次展开调用，
+        // 避免多次 toggleExpandingView（每次都是整树一次 withAnimation 事务）。
+        notifyTask?.cancel()
+        notifyTask = Task {
             try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
             self.coordinator.toggleExpandingView(status: true, type: .battery)
         }
     }

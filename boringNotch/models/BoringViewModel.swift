@@ -206,7 +206,11 @@ class BoringViewModel: NSObject, ObservableObject {
         self.closedNotchSize = self.notchSize
         self.notchState = .closed
         self.isBatteryPopoverActive = false
-        self.coordinator.sneakPeek.show = false
+        // 已收起时不再写 sneakPeek：逐字段写 struct 也会触发整树 objectWillChange，
+        // close() 在 hover 移出等路径上调用频繁。
+        if coordinator.sneakPeek.show {
+            self.coordinator.sneakPeek.show = false
+        }
         self.edgeAutoOpenActive = false
 
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
