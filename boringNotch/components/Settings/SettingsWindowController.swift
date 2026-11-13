@@ -67,8 +67,9 @@ class SettingsWindowController: NSWindowController {
     }
     
     func showWindow() {
-        // Set app to regular mode first
-        NSApp.setActivationPolicy(.regular)
+        // Set app to regular mode only when Dock icon is enabled; otherwise
+        // keep accessory mode so the Dock icon stays hidden.
+        NSApp.setActivationPolicy(Defaults[.showDockIcon] ? .regular : .accessory)
         
         // If window is already visible, bring it to front properly
         if window?.isVisible == true {
@@ -105,18 +106,23 @@ class SettingsWindowController: NSWindowController {
 extension SettingsWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         relinquishFocus()
+        // When the settings window closes, restore the activation policy
+        // based on the user's Dock icon preference so the Dock icon hides
+        // if the user has turned it off.
+        NSApp.setActivationPolicy(Defaults[.showDockIcon] ? .regular : .accessory)
     }
-    
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         return true
     }
-    
+
     func windowDidBecomeKey(_ notification: Notification) {
-        // Ensure app is in regular mode when window becomes key
-        NSApp.setActivationPolicy(.regular)
+        // Ensure app is in regular mode when window becomes key, but only
+        // if the user wants the Dock icon visible.
+        NSApp.setActivationPolicy(Defaults[.showDockIcon] ? .regular : .accessory)
     }
-    
+
     func windowDidResignKey(_ notification: Notification) {
     }
-    
+
 }
