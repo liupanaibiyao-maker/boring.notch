@@ -9,16 +9,8 @@ import SwiftUI
 import Defaults
 
 struct SystemEventIndicatorModifier: View {
-    @EnvironmentObject var vm: BoringViewModel
     @Binding var eventType: SneakContentType
-    @Binding var value: CGFloat {
-        didSet {
-            DispatchQueue.main.async {
-                self.sendEventBack(value)
-                self.vm.objectWillChange.send()
-            }
-        }
-    }
+    @Binding var value: CGFloat
     @Binding var icon: String
     let showSlider: Bool = false
     var sendEventBack: (CGFloat) -> Void
@@ -59,7 +51,12 @@ struct SystemEventIndicatorModifier: View {
                     EmptyView()
             }
             if (eventType != .mic) {
-                DraggableProgressBar(value: $value)
+                // 滑块回写走 onChange 直通（与 InlineHUD / OpenNotchHUD 一致）：
+                // 原来的 @Binding didSet + DispatchQueue.main.async + vm.objectWillChange.send()
+                // 存在两个问题：经由子视图 Binding 写入时不经过该属性的赋值路径，
+                // didSet 实际走不到，拖动滑块回写不到系统音量/亮度；即使触发，
+                // 也会异步再发一次整棵 vm 失效，把一次拖动放大成整树重算。
+                DraggableProgressBar(value: $value, onChange: { newVal in sendEventBack(newVal) })
                 if Defaults[.showClosedNotchHUDPercentage] {
                     Text("\(Int(value * 100))%")
                         .font(.system(size: 12, weight: .medium))
@@ -96,7 +93,6 @@ struct SystemEventIndicatorModifier: View {
 }
 
 struct DraggableProgressBar: View {
-    @EnvironmentObject var vm: BoringViewModel
     @Binding var value: CGFloat
     var onChange: ((CGFloat) -> Void)? = nil
     

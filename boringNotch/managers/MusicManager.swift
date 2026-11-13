@@ -7,6 +7,7 @@
 import AppKit
 import Combine
 import Defaults
+import ImageIO
 import SwiftUI
 
 let defaultImage: NSImage = .init(
@@ -650,13 +651,31 @@ class MusicManager: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            if let artworkImage = NSImage(data: artworkData) {
+            // Artwork is rendered small inside the notch. Downsample while
+            // decoding so a 1000x1000+ cover doesn't stay resident at full
+            // resolution for every track change.
+            if let artworkImage = Self.downsampledArtwork(from: artworkData, maxPixelSize: 1024) {
                 DispatchQueue.main.async { [weak self] in
                     self?.usingAppIconForArtwork = false
                     self?.updateAlbumArt(newAlbumArt: artworkImage)
                 }
             }
         }
+    }
+
+    private static func downsampledArtwork(from data: Data, maxPixelSize: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return NSImage(data: data)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return NSImage(data: data)
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     private func updateIdleState(state: Bool) {

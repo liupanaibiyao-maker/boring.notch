@@ -10,7 +10,7 @@ import Combine
 import Defaults
 import SwiftUI
 
-enum SneakContentType {
+enum SneakContentType: Equatable {
     case brightness
     case volume
     case backlight
@@ -20,7 +20,7 @@ enum SneakContentType {
     case download
 }
 
-struct sneakPeek {
+struct sneakPeek: Equatable {
     var show: Bool = false
     var type: SneakContentType = .music
     var value: CGFloat = 0
@@ -34,12 +34,12 @@ struct SharedSneakPeek: Codable {
     var icon: String
 }
 
-enum BrowserType {
+enum BrowserType: Equatable {
     case chromium
     case safari
 }
 
-struct ExpandedItem {
+struct ExpandedItem: Equatable {
     var show: Bool = false
     var type: SneakContentType = .battery
     var value: CGFloat = 0
@@ -173,9 +173,18 @@ class BoringViewCoordinator: ObservableObject {
         }
     }
     
+    // JSONDecoder / NumberFormatter 每次新建都不便宜（后者涉及 ICU 初始化），
+    // 事件高频到达时复用同一份；本方法只在主线程调用，静态共享安全。
+    private static let sneakPeekDecoder = JSONDecoder()
+    private static let sneakPeekValueFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
+
     @objc func sneakPeekEvent(_ notification: Notification) {
-        let decoder = JSONDecoder()
-        if let decodedData = try? decoder.decode(
+        if let decodedData = try? Self.sneakPeekDecoder.decode(
             SharedSneakPeek.self, from: notification.userInfo?.first?.value as! Data)
         {
             let contentType =
@@ -188,18 +197,19 @@ class BoringViewCoordinator: ObservableObject {
                         : decodedData.type == "mic"
                             ? SneakContentType.mic : SneakContentType.brightness
 
-            let formatter = NumberFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.numberStyle = .decimal
-            let value = CGFloat((formatter.number(from: decodedData.value) ?? 0.0).floatValue)
+            let value = CGFloat((Self.sneakPeekValueFormatter.number(from: decodedData.value) ?? 0.0).floatValue)
             let icon = decodedData.icon
 
+            #if DEBUG
             print("Decoded: \(decodedData), Parsed value: \(value)")
+            #endif
 
             toggleSneakPeek(status: decodedData.show, type: contentType, value: value, icon: icon)
 
         } else {
+            #if DEBUG
             print("Failed to decode JSON data")
+            #endif
         }
     }
 
@@ -214,17 +224,40 @@ class BoringViewCoordinator: ObservableObject {
                 return
             }
         }
-        Task { @MainActor in
-            withAnimation(.smooth) {
-                self.sneakPeek.show = status
-                self.sneakPeek.type = type
-                self.sneakPeek.value = value
-                self.sneakPeek.icon = icon
+
+        // 同值重复到达不再发布：原来逐字段赋值会触发 4 次 objectWillChange，
+        // 每次都让整棵 ContentView（含已展开的 NotchHomeView、MusicLiveActivity）
+        // 重算 body；14 条通知连发时就是 14 次整树重算。只重计时隐藏。
+        // 裸名 sneakPeek 在此同时是模块级 struct 与下方 @Published 属性，
+        // 会被解析为属性而非初始化器，需用模块名限定以构造新值。
+        let newValue = Boring_Notch.sneakPeek(show: status, type: type, value: value, icon: icon)
+        if newValue == sneakPeek {
+            if status {
+                scheduleSneakPeekHide(after: duration)
+            } else {
+                sneakPeekTask?.cancel()
             }
+            updateMicStatusIfNeeded(type: type, value: value)
+            return
         }
 
-        if type == .mic {
-            currentMicStatus = value == 1
+        // 本类已是 @MainActor，调用方也都在主线程（音量/亮度管理器、
+        // MediaKeyInterceptor、MusicManager 的 @MainActor 路径、电池主线程回调），
+        // 不再经 Task { @MainActor in } 跳一次：原来每个事件都新建一个 Task，
+        // 14 条通知就是 14 个任务 + 14 次独立动画事务。整 struct 一次赋值，
+        // 只触发一次 objectWillChange。
+        withAnimation(.smooth) {
+            sneakPeek = newValue
+        }
+        updateMicStatusIfNeeded(type: type, value: value)
+    }
+
+    /// 只有值真的变了才写 @AppStorage，避免同值重复写触发无关观察者。
+    private func updateMicStatusIfNeeded(type: SneakContentType, value: CGFloat) {
+        guard type == .mic else { return }
+        let muted = value == 1
+        if currentMicStatus != muted {
+            currentMicStatus = muted
         }
     }
 
@@ -263,13 +296,16 @@ class BoringViewCoordinator: ObservableObject {
         value: CGFloat = 0,
         browser: BrowserType = .chromium
     ) {
-        Task { @MainActor in
-            withAnimation(.smooth) {
-                self.expandingView.show = status
-                self.expandingView.type = type
-                self.expandingView.value = value
-                self.expandingView.browser = browser
-            }
+        // 同 toggleSneakPeek：同值重复到达不再整 struct 重发。
+        // 电池一次插拔会扇出多条事件（电源/充电/低电量），靠这里合并成一次有效更新。
+        let newValue = ExpandedItem(show: status, type: type, value: value, browser: browser)
+        if newValue == expandingView {
+            // 值未变：不重复发布，但仍按原语义重计时隐藏。
+            scheduleExpandingViewHideIfNeeded()
+            return
+        }
+        withAnimation(.smooth) {
+            expandingView = newValue
         }
     }
 
@@ -277,18 +313,24 @@ class BoringViewCoordinator: ObservableObject {
 
     @Published var expandingView: ExpandedItem = .init() {
         didSet {
-            if expandingView.show {
-                expandingViewTask?.cancel()
-                let duration: TimeInterval = (expandingView.type == .download ? 2 : 3)
-                let currentType = expandingView.type
-                expandingViewTask = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(duration))
-                    guard let self = self, !Task.isCancelled else { return }
-                    self.toggleExpandingView(status: false, type: currentType)
-                }
-            } else {
-                expandingViewTask?.cancel()
+            scheduleExpandingViewHideIfNeeded()
+        }
+    }
+
+    /// 展开态显示时重计时自动收起；收起时取消待收起任务。
+    /// 从 didSet 抽出，供同值重复调用复用（只重计时、不重复发布）。
+    private func scheduleExpandingViewHideIfNeeded() {
+        if expandingView.show {
+            expandingViewTask?.cancel()
+            let duration: TimeInterval = (expandingView.type == .download ? 2 : 3)
+            let currentType = expandingView.type
+            expandingViewTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(duration))
+                guard let self = self, !Task.isCancelled else { return }
+                self.toggleExpandingView(status: false, type: currentType)
             }
+        } else {
+            expandingViewTask?.cancel()
         }
     }
     

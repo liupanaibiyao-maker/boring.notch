@@ -14,8 +14,10 @@ actor ThumbnailService {
     static let shared = ThumbnailService()
 
     private var cache: [String: NSImage] = [:]
+    private var cacheOrder: [String] = []
     private var pendingRequests: [String: Task<NSImage?, Never>] = [:]
     private let thumbnailGenerator = QLThumbnailGenerator.shared
+    private let maxCacheEntries = 200
 
     private init() {}
     
@@ -33,7 +35,7 @@ actor ThumbnailService {
         let task = Task<NSImage?, Never> {
             let thumbnail = await generateQuickLookThumbnail(for: url, size: size)
             if let thumbnail = thumbnail {
-                cache[cacheKey] = thumbnail
+                store(thumbnail, for: cacheKey)
             }
             pendingRequests[cacheKey] = nil
             return thumbnail
@@ -45,10 +47,25 @@ actor ThumbnailService {
     
     func clearCache() {
         cache.removeAll()
+        cacheOrder.removeAll()
     }
     
     func clearCache(for url: URL) {
         cache = cache.filter { !$0.key.starts(with: url.path) }
+        cacheOrder.removeAll { $0.hasPrefix(url.path) }
+    }
+
+    private func store(_ image: NSImage, for key: String) {
+        if cache[key] == nil {
+            cacheOrder.append(key)
+        }
+        cache[key] = image
+        // Bound the cache: thumbnails are full NSImages and an unbounded
+        // dictionary grows with every file the user ever shelves.
+        while cacheOrder.count > maxCacheEntries {
+            let oldest = cacheOrder.removeFirst()
+            cache.removeValue(forKey: oldest)
+        }
     }
     
     // MARK: - Private Methods
@@ -57,7 +74,6 @@ actor ThumbnailService {
         let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2.0 }
         
         return await url.accessSecurityScopedResource { scopedURL in
-            NSLog("🔐 ThumbnailService: obtaining security scope for \(scopedURL.path)")
             let request = QLThumbnailGenerator.Request(
                 fileAt: scopedURL,
                 size: size,
@@ -69,7 +85,6 @@ actor ThumbnailService {
             return await withCheckedContinuation { (continuation: CheckedContinuation<NSImage?, Never>) in
                 thumbnailGenerator.generateBestRepresentation(for: request) { representation, error in
                     if let rep = representation {
-                        NSLog("🔍 ThumbnailService: generated thumbnail for \(scopedURL.path)")
                         continuation.resume(returning: rep.nsImage)
                     } else {
                         if let err = error { 

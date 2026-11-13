@@ -26,6 +26,22 @@ class AudioSpectrum: NSView {
         setupBars()
     }
 
+    deinit {
+        animationTimer?.invalidate()
+        animationTimer = nil
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        // Stop the repeating timer while off-screen; otherwise it keeps
+        // driving CALayer animations after the view leaves the hierarchy.
+        if newWindow == nil {
+            stopAnimating()
+        } else if isPlaying {
+            startAnimating()
+        }
+    }
+
     private func setupBars() {
         let barWidth: CGFloat = 2
         let barCount = 4
