@@ -41,6 +41,11 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         private var clientInstance: NSObject?
         private let getSelector = NSSelectorFromString("brightnessForKeyboard:")
         private let setSelector = NSSelectorFromString("setBrightness:forKeyboard:")
+        // The IMP for a given class/selector pair is fixed while the class is
+        // loaded, so resolve it once at init instead of on every brightness
+        // call (class_getInstanceMethod + method_getImplementation per call).
+        private let getIMP: BrightnessGetter?
+        private let setIMP: BrightnessSetter?
 
         init() {
             var loaded = false
@@ -56,20 +61,27 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             if loaded, let cls = NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type {
                 clientInstance = cls.init()
             }
+            if let clientInstance {
+                getIMP = Self.methodIMP(on: clientInstance, selector: getSelector, as: BrightnessGetter.self)
+                setIMP = Self.methodIMP(on: clientInstance, selector: setSelector, as: BrightnessSetter.self)
+            } else {
+                getIMP = nil
+                setIMP = nil
+            }
         }
 
         var isAvailable: Bool { clientInstance != nil }
 
         func currentBrightness() -> Float? {
             guard let clientInstance,
-                  let fn: BrightnessGetter = methodIMP(on: clientInstance, selector: getSelector, as: BrightnessGetter.self)
+                  let fn = getIMP
             else { return nil }
             return fn(clientInstance, getSelector, Self.keyboardID)
         }
 
         func setBrightness(_ value: Float) -> Bool {
             guard let clientInstance,
-                  let fn: BrightnessSetter = methodIMP(on: clientInstance, selector: setSelector, as: BrightnessSetter.self)
+                  let fn = setIMP
             else { return false }
             return fn(clientInstance, setSelector, value, Self.keyboardID).boolValue
         }
@@ -77,7 +89,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         private typealias BrightnessGetter = @convention(c) (NSObject, Selector, UInt64) -> Float
         private typealias BrightnessSetter = @convention(c) (NSObject, Selector, Float, UInt64) -> ObjCBool
 
-        private func methodIMP<T>(on object: NSObject, selector: Selector, as type: T.Type) -> T? {
+        private static func methodIMP<T>(on object: NSObject, selector: Selector, as type: T.Type) -> T? {
             guard let cls = object_getClass(object),
                   let method = class_getInstanceMethod(cls, selector)
             else { return nil }
@@ -151,13 +163,27 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
 
     // MARK: - Private helpers for DisplayServices / IOKit access
-    private func displayServicesGetBrightness(displayID: CGDirectDisplayID, out: inout Float) -> Bool {
-        // Don't pass a nil handle to dlsym: it would fall back to a global
-        // symbol search and could resolve an unrelated symbol.
+    private typealias DisplayServicesGetBrightnessFn = @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
+    private typealias DisplayServicesSetBrightnessFn = @convention(c) (CGDirectDisplayID, Float) -> Int32
+
+    // Resolve the DisplayServices entry points once: dlsym on an
+    // already-loaded handle always returns the same pointer, and the
+    // framework stays loaded for the lifetime of this helper process.
+    // Avoids a dlsym lookup on every brightness XPC call.
+    private static let displayServicesGetBrightnessFn: DisplayServicesGetBrightnessFn? = {
         guard let handle = DisplayServicesHandle.handle,
-              let sym = dlsym(handle, "DisplayServicesGetBrightness") else { return false }
-        typealias Fn = @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
-        let fn = unsafeBitCast(sym, to: Fn.self)
+              let sym = dlsym(handle, "DisplayServicesGetBrightness") else { return nil }
+        return unsafeBitCast(sym, to: DisplayServicesGetBrightnessFn.self)
+    }()
+
+    private static let displayServicesSetBrightnessFn: DisplayServicesSetBrightnessFn? = {
+        guard let handle = DisplayServicesHandle.handle,
+              let sym = dlsym(handle, "DisplayServicesSetBrightness") else { return nil }
+        return unsafeBitCast(sym, to: DisplayServicesSetBrightnessFn.self)
+    }()
+
+    private func displayServicesGetBrightness(displayID: CGDirectDisplayID, out: inout Float) -> Bool {
+        guard let fn = Self.displayServicesGetBrightnessFn else { return false }
         var tmp: Float = 0
         let r = fn(displayID, &tmp)
         if r == 0 { out = tmp; return true }
@@ -165,10 +191,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
 
     private func displayServicesSetBrightness(displayID: CGDirectDisplayID, value: Float) -> Bool {
-        guard let handle = DisplayServicesHandle.handle,
-              let sym = dlsym(handle, "DisplayServicesSetBrightness") else { return false }
-        typealias Fn = @convention(c) (CGDirectDisplayID, Float) -> Int32
-        let fn = unsafeBitCast(sym, to: Fn.self)
+        guard let fn = Self.displayServicesSetBrightnessFn else { return false }
         return fn(displayID, value) == 0
     }
 

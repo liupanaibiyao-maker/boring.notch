@@ -69,6 +69,11 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
 
+    // Reused across adapter updates: creating an ISO8601DateFormatter is
+    // comparatively expensive, and these updates arrive on the single
+    // stream task, so sharing one instance is safe and behavior-identical.
+    private let timestampFormatter = ISO8601DateFormatter()
+
     // MARK: - Initialization
     init?() {
         guard
@@ -275,7 +280,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         }
 
         if let dateString = payload.timestamp,
-           let date = ISO8601DateFormatter().date(from: dateString) {
+           let date = timestampFormatter.date(from: dateString) {
             newPlaybackState.lastUpdated = date
         } else if !diff {
             newPlaybackState.lastUpdated = Date()
