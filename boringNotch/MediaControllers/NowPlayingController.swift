@@ -351,6 +351,7 @@ actor JSONLinesPipeHandler {
     private let pipe: Pipe
     private let fileHandle: FileHandle
     private var buffer = ""
+    private let decoder = JSONDecoder()
     
     init() {
         self.pipe = Pipe()
@@ -396,7 +397,7 @@ actor JSONLinesPipeHandler {
             return
         }
         do {
-            let decodedObject = try JSONDecoder().decode(T.self, from: data)
+            let decodedObject = try decoder.decode(T.self, from: data)
             await onLine(decodedObject)
         } catch {
             // Ignore lines that can't be decoded
