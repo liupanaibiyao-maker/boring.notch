@@ -74,10 +74,40 @@ struct ShelfView: View {
                     .padding()
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            .overlay(alignment: .bottomTrailing) {
+                if !tvm.isEmpty {
+                    removeAllButton
+                        .padding(.trailing, 10)
+                        .padding(.bottom, 2)
+                }
+            }
             .transaction { transaction in
                 transaction.animation = vm.animation
             }
             .contentShape(Rectangle())
+    }
+
+    private var removeAllButton: some View {
+        Button(action: removeAllItems) {
+            HStack(spacing: 4) {
+                Image(systemName: "trash")
+                Text("Remove All")
+            }
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(.white.opacity(0.65))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.08))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help("Remove All")
     }
 
     var content: some View {
@@ -109,8 +139,29 @@ struct ShelfView: View {
                                 goToPreviousPage()
                             }
                         }
-                        gridPage(cellWidth: cellWidth, cellHeight: cellHeight)
+                        if pageCount > 1 {
+                            ScrollView(.horizontal) {
+                                LazyHStack(spacing: 0) {
+                                    ForEach(0..<pageCount, id: \.self) { page in
+                                        gridPage(
+                                            items: items(at: page),
+                                            cellWidth: cellWidth,
+                                            cellHeight: cellHeight
+                                        )
+                                        .frame(width: gridWidth, height: geo.size.height)
+                                        .id(page)
+                                    }
+                                }
+                                .scrollTargetLayout()
+                            }
+                            .scrollTargetBehavior(.viewAligned)
+                            .scrollPosition(id: scrollPageBinding)
+                            .scrollIndicators(.never)
                             .frame(width: gridWidth, height: geo.size.height)
+                        } else {
+                            gridPage(items: pageItems, cellWidth: cellWidth, cellHeight: cellHeight)
+                                .frame(width: gridWidth, height: geo.size.height)
+                        }
                         if pageCount > 1 {
                             scrollArrow(systemName: "chevron.right") {
                                 goToNextPage()
@@ -144,6 +195,21 @@ struct ShelfView: View {
         return Array(tvm.items[start..<min(start + itemsPerPage, tvm.items.count)])
     }
 
+    private var scrollPageBinding: Binding<Int?> {
+        Binding(
+            get: { currentPage },
+            set: { newValue in
+                if let newValue { currentPage = newValue }
+            }
+        )
+    }
+
+    private func items(at page: Int) -> [ShelfItem] {
+        let start = page * itemsPerPage
+        guard start < tvm.items.count else { return [] }
+        return Array(tvm.items[start..<min(start + itemsPerPage, tvm.items.count)])
+    }
+
     private func clampCurrentPage() {
         if currentPage >= pageCount {
             currentPage = pageCount - 1
@@ -165,11 +231,18 @@ struct ShelfView: View {
         }
     }
 
+    private func removeAllItems() {
+        selection.clear()
+        currentPage = 0
+        withAnimation(.easeInOut(duration: 0.15)) {
+            tvm.removeAll()
+        }
+    }
+
     // MARK: - Grid
 
     @ViewBuilder
-    private func gridPage(cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
-        let items = pageItems
+    private func gridPage(items: [ShelfItem], cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
         switch items.count {
         case 0:
             EmptyView()
