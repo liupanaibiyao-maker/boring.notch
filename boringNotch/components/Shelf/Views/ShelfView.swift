@@ -14,12 +14,14 @@ struct ShelfView: View {
     @StateObject var selection = ShelfSelectionModel.shared
     @StateObject private var quickLookService = QuickLookService()
     private let spacing: CGFloat = 8
+    private let itemsPerPage = 4
+    @State private var currentPage = 0
 
     var body: some View {
         HStack(spacing: 12) {
             FileShareView()
                 .aspectRatio(1, contentMode: .fit)
-                .frame(maxWidth: 130)
+                .frame(maxWidth: 100)
                 .environmentObject(vm)
             panel
                 .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
@@ -76,7 +78,6 @@ struct ShelfView: View {
                 transaction.animation = vm.animation
             }
             .contentShape(Rectangle())
-            .onTapGesture { selection.clear() }
     }
 
     var content: some View {
@@ -96,59 +97,120 @@ struct ShelfView: View {
                 }
             } else {
                 GeometryReader { geo in
-                    ScrollViewReader { proxy in
-                        ZStack {
-                            ScrollView(.horizontal) {
-                                HStack(spacing: spacing) {
-                                    ForEach(Array(tvm.items.enumerated()), id: \.element.id) { index, item in
-                                        ShelfItemView(item: item)
-                                            .environmentObject(quickLookService)
-                                            .id(index)
-                                    }
-                                }
-                                .padding(.horizontal, 2)
-                            }
-                            .scrollIndicators(.never)
-                            .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
-                                handleDrop(providers: providers)
-                            }
+                    let arrowWidth: CGFloat = pageCount > 1 ? 18 : 0
+                    let arrowGap: CGFloat = pageCount > 1 ? 4 : 0
+                    let gridWidth = geo.size.width - (arrowWidth + arrowGap) * 2
+                    let cellWidth = (gridWidth - spacing) / 2
+                    let cellHeight = (geo.size.height - spacing) / 2
 
-                            if isOverflowing(availableWidth: geo.size.width) {
-                                HStack {
-                                    scrollArrow(systemName: "chevron.left") {
-                                        scroll(proxy: proxy, to: 0)
-                                    }
-                                    Spacer()
-                                    scrollArrow(systemName: "chevron.right") {
-                                        scroll(proxy: proxy, to: tvm.items.count - 1)
-                                    }
-                                }
-                                .padding(.horizontal, -4)
+                    HStack(spacing: arrowGap) {
+                        if pageCount > 1 {
+                            scrollArrow(systemName: "chevron.left") {
+                                goToPreviousPage()
                             }
                         }
+                        gridPage(cellWidth: cellWidth, cellHeight: cellHeight)
+                            .frame(width: gridWidth, height: geo.size.height)
+                        if pageCount > 1 {
+                            scrollArrow(systemName: "chevron.right") {
+                                goToNextPage()
+                            }
+                        }
+                    }
+                    .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
+                        handleDrop(providers: providers)
                     }
                 }
             }
         }
         .onAppear {
             ShelfStateViewModel.shared.cleanupInvalidItems()
+            clampCurrentPage()
+        }
+        .onChange(of: tvm.items.count) {
+            clampCurrentPage()
         }
     }
 
-    /// Width taken by each shelf item (105 content + 5pt horizontal padding on each side).
-    private let itemWidth: CGFloat = 115
+    // MARK: - Paging
 
-    private func isOverflowing(availableWidth: CGFloat) -> Bool {
-        guard tvm.items.count > 1 else { return false }
-        let contentWidth = CGFloat(tvm.items.count) * itemWidth
-            + CGFloat(tvm.items.count - 1) * spacing
-        return contentWidth > availableWidth
+    private var pageCount: Int {
+        max(1, Int(ceil(Double(tvm.items.count) / Double(itemsPerPage))))
     }
 
-    private func scroll(proxy: ScrollViewProxy, to index: Int) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            proxy.scrollTo(index, anchor: .center)
+    private var pageItems: [ShelfItem] {
+        let start = currentPage * itemsPerPage
+        guard start < tvm.items.count else { return [] }
+        return Array(tvm.items[start..<min(start + itemsPerPage, tvm.items.count)])
+    }
+
+    private func clampCurrentPage() {
+        if currentPage >= pageCount {
+            currentPage = pageCount - 1
         }
+        if currentPage < 0 { currentPage = 0 }
+    }
+
+    private func goToNextPage() {
+        guard pageCount > 1 else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            currentPage = (currentPage + 1) % pageCount
+        }
+    }
+
+    private func goToPreviousPage() {
+        guard pageCount > 1 else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            currentPage = (currentPage - 1 + pageCount) % pageCount
+        }
+    }
+
+    // MARK: - Grid
+
+    @ViewBuilder
+    private func gridPage(cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
+        let items = pageItems
+        switch items.count {
+        case 0:
+            EmptyView()
+        case 1:
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                shelfItem(items[0], cellWidth: cellWidth, cellHeight: cellHeight)
+                Spacer(minLength: 0)
+            }
+        case 2:
+            HStack(spacing: spacing) {
+                ForEach(items) { item in
+                    shelfItem(item, cellWidth: cellWidth, cellHeight: cellHeight)
+                }
+            }
+        case 3:
+            VStack(spacing: spacing) {
+                shelfItem(items[0], cellWidth: cellWidth, cellHeight: cellHeight)
+                HStack(spacing: spacing) {
+                    shelfItem(items[1], cellWidth: cellWidth, cellHeight: cellHeight)
+                    shelfItem(items[2], cellWidth: cellWidth, cellHeight: cellHeight)
+                }
+            }
+        default:
+            VStack(spacing: spacing) {
+                HStack(spacing: spacing) {
+                    shelfItem(items[0], cellWidth: cellWidth, cellHeight: cellHeight)
+                    shelfItem(items[1], cellWidth: cellWidth, cellHeight: cellHeight)
+                }
+                HStack(spacing: spacing) {
+                    shelfItem(items[2], cellWidth: cellWidth, cellHeight: cellHeight)
+                    shelfItem(items[3], cellWidth: cellWidth, cellHeight: cellHeight)
+                }
+            }
+        }
+    }
+
+    private func shelfItem(_ item: ShelfItem, cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
+        ShelfItemView(item: item, cellWidth: cellWidth, cellHeight: cellHeight)
+            .id(item.id)
+            .environmentObject(quickLookService)
     }
 
     @ViewBuilder
@@ -157,10 +219,10 @@ struct ShelfView: View {
             Image(systemName: systemName)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.white.opacity(0.85))
-                .frame(width: 20, height: 36)
+                .frame(width: 18, height: 32)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.black.opacity(0.55))
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.black.opacity(0.6))
                 )
         }
         .buttonStyle(.plain)

@@ -13,6 +13,8 @@ import QuickLook
 
 struct ShelfItemView: View {
     let item: ShelfItem
+    let cellWidth: CGFloat
+    let cellHeight: CGFloat?
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var selection = ShelfSelectionModel.shared
     @StateObject private var viewModel: ShelfItemViewModel
@@ -24,21 +26,23 @@ struct ShelfItemView: View {
     private var isSelected: Bool { viewModel.isSelected }
     private var shouldHideDuringDrag: Bool { selection.isDragging && selection.isSelected(item.id) && false }
     
-    init(item: ShelfItem) {
+    init(item: ShelfItem, cellWidth: CGFloat = 105, cellHeight: CGFloat? = nil) {
         self.item = item
+        self.cellWidth = cellWidth
+        self.cellHeight = cellHeight
         _viewModel = StateObject(wrappedValue: ShelfItemViewModel(item: item))
     }
 
     var body: some View {
         ZStack {
             if !shouldHideDuringDrag {
-                VStack(alignment: .center, spacing: 2) {
+                VStack(alignment: .center, spacing: 1) {
                     iconView
                     textView
                 }
-                .frame(width: 105)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 5)
+                .frame(width: cellWidth, height: cellHeight)
+                .padding(.vertical, cellHeight == nil ? 10 : 0)
+                .padding(.horizontal, cellHeight == nil ? 5 : 0)
                 .background(backgroundView)
                 .contentShape(Rectangle())
                 .animation(.easeInOut(duration: 0.1), value: debouncedDropTarget)
@@ -58,9 +62,7 @@ struct ShelfItemView: View {
                 )
             } else {
                 Color.clear
-                    .frame(width: 105)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 5)
+                    .frame(width: cellWidth, height: cellHeight)
             }
         }
         .onChange(of: viewModel.isDropTargeted) { _, targeted in
@@ -94,23 +96,31 @@ struct ShelfItemView: View {
 
     // MARK: - View Components
 
+    private var iconSize: CGFloat {
+        guard let cellHeight else { return 56 }
+        return max(28, min(cellWidth - 30, cellHeight - 26))
+    }
+
     private var iconView: some View {
         Image(nsImage: viewModel.thumbnail ?? item.icon)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .frame(width: iconSize, height: iconSize)
+            .clipShape(RoundedRectangle(cornerRadius: iconSize >= 48 ? 12 : 8))
             .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 2)
     }
 
     private var textView: some View {
         Text(item.displayName)
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: cellHeight == nil ? 12 : 10.5, weight: .medium))
             .foregroundStyle(.primary)
             .lineLimit(2)
             .truncationMode(.middle)
             .multilineTextAlignment(.center)
-            .frame(height: 30, alignment: .top)
+            .frame(
+                height: cellHeight == nil ? 30 : max(18, cellHeight! - iconSize - 1),
+                alignment: .top
+            )
     }
 
     private var backgroundView: some View {
