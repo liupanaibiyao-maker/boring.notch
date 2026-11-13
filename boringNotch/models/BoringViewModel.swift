@@ -159,9 +159,6 @@ class BoringViewModel: NSObject, ObservableObject {
                         NSWorkspace.shared.open(url)
                     }
                 }
-
-                NSApp.setActivationPolicy(.accessory)
-                NSApp.deactivate()
             }
 
         case .notDetermined:
