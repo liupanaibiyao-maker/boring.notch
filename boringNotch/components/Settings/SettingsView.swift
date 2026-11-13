@@ -152,6 +152,7 @@ struct GeneralSettings: View {
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.appLanguage) var appLanguage
+    @Default(.showDockIcon) var showDockIcon
     
 
     var body: some View {
@@ -164,6 +165,17 @@ struct GeneralSettings: View {
                     Text("Show menu bar icon")
                 }
                 .tint(.effectiveAccent)
+                Toggle(isOn: Binding(
+                    get: { Defaults[.showDockIcon] },
+                    set: { Defaults[.showDockIcon] = $0 }
+                )) {
+                    Text("Show icon in Dock")
+                }
+                .tint(.effectiveAccent)
+                .onChange(of: showDockIcon) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name(rawValue: "showDockIconChanged"), object: nil)
+                }
                 LaunchAtLogin.Toggle {
                     Text("Launch at login")
                 }

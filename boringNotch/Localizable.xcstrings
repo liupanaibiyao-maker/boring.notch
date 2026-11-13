@@ -20614,6 +20614,28 @@
         }
       }
     },
+    "Show icon in Dock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show icon in Dock"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在程序坞中显示图标"
+          }
+        },
+        "zh": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在程序坞中显示图标"
+          }
+        }
+      }
+    },
     "Show music live activity": {
       "localizations": {
         "ar": {

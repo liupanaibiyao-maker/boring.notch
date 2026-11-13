@@ -67,6 +67,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isScreenLocked: Bool = false
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
+    private var showDockIconObserver: Any?
+
+    @MainActor
+    func applyDockIconPolicy() {
+        if Defaults[.showDockIcon] {
+            NSApp.setActivationPolicy(.regular)
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -74,6 +84,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
+        if let observer = showDockIconObserver {
+            NotificationCenter.default.removeObserver(observer)
+            showDockIconObserver = nil
+        }
         if let observer = screenLockedObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
             screenLockedObserver = nil
@@ -294,6 +308,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+
+        // Apply Dock icon visibility based on user setting
+        applyDockIconPolicy()
+
+        showDockIconObserver = NotificationCenter.default.addObserver(
+            forName: Notification.Name("showDockIconChanged"), object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.applyDockIconPolicy()
+            }
+        }
 
         NotificationCenter.default.addObserver(
             forName: Notification.Name.selectedScreenChanged, object: nil, queue: nil
