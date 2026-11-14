@@ -24,7 +24,11 @@ struct MusicPlayerView: View {
                     height: albumArtSize
                 )
                 .padding(.all, 5)
-            MusicControlsView().drawingGroup().compositingGroup()
+            MusicControlsView()
+        }
+        .overlay(alignment: .bottom) {
+            MusicToolbarView()
+                .padding(.bottom, 6)
         }
     }
 
@@ -128,12 +132,9 @@ struct AlbumArtView: View {
 struct MusicControlsView: View {
     @ObservedObject var musicManager = MusicManager.shared
         @EnvironmentObject var vm: BoringViewModel
-        @ObservedObject var webcamManager = WebcamManager.shared
     @State private var sliderValue: Double = 0
     @State private var dragging: Bool = false
     @State private var lastDragged: Date = .distantPast
-    @Default(.musicControlSlots) private var slotConfig
-    @Default(.musicControlSlotLimit) private var slotLimit
 
     var body: some View {
         GeometryReader { geo in
@@ -144,17 +145,15 @@ struct MusicControlsView: View {
                 musicSlider
                 if Defaults[.enableLyrics] {
                     lyricsLine
-                        .frame(maxHeight: .infinity)
-                        .clipped()
                 } else {
                     Spacer(minLength: 0)
                 }
-                slotToolbar
-                    .frame(height: 40)
             }
             .padding(.top, 8)
             .padding(.leading, 5)
-            .padding(.bottom, 2)
+            .padding(.bottom, 46)
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -235,26 +234,34 @@ struct MusicControlsView: View {
         }
     }
 
-    private var slotToolbar: some View {
-        let slots = activeSlots
-        return HStack(spacing: 6) {
-            ForEach(Array(slots.enumerated()), id: \.offset) { index, slot in
-                slotView(for: slot)
-                    .frame(alignment: .center)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .offset(x: -toolbarCenterOffset)
-    }
-
-    /// The toolbar lives in the column to the right of the album art, so
-    /// centering it there would push it visually to the right of the notch.
-    /// Shift it left by half the album-art column to center it across the
+    /// Lyrics live in the column to the right of the album art, so centering
+    /// them there would push them visually to the right of the notch. Shift
+    /// them left by half the album-art column to center them across the
     /// whole player.
     private var toolbarCenterOffset: CGFloat {
         guard vm.notchState == .open else { return 0 }
         let art = min(120, max(70, vm.notchSize.height - 160))
         return (art + 10) / 2 + 6
+    }
+
+}
+
+struct MusicToolbarView: View {
+    @ObservedObject var musicManager = MusicManager.shared
+    @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var webcamManager = WebcamManager.shared
+    @Default(.musicControlSlots) private var slotConfig
+    @Default(.musicControlSlotLimit) private var slotLimit
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(activeSlots.enumerated()), id: \.offset) { _, slot in
+                slotView(for: slot)
+                    .frame(alignment: .center)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: 40)
     }
 
     private var activeSlots: [MusicControlButton] {
