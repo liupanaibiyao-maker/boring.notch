@@ -143,17 +143,18 @@ struct MusicControlsView: View {
                     .frame(height: 4)
                 musicSlider
                 if Defaults[.enableLyrics] {
-                    Spacer(minLength: 2)
                     lyricsLine
-                    Spacer(minLength: 2)
+                        .frame(maxHeight: .infinity)
+                        .clipped()
                 } else {
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 0)
                 }
                 slotToolbar
+                    .frame(height: 40)
             }
-            .padding(.top, 10)
+            .padding(.top, 8)
             .padding(.leading, 5)
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
         }
         .buttonStyle(PlainButtonStyle())
     }
