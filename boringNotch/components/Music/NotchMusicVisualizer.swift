@@ -650,7 +650,6 @@ struct MusicVisualizerSettings: View {
     @Default(.musicVisualizerCustomImage) private var customImageName
     @Default(.musicVisualizerSensitivity) private var sensitivity
 
-    @ObservedObject private var spectrum = AudioSpectrumManager.shared
     @State private var isImporting = false
     @State private var importError: String?
 
@@ -774,6 +773,16 @@ struct MusicVisualizerSettings: View {
 
     @ViewBuilder
     private var audioStatusRow: some View {
+        VisualizerAudioStatusRow()
+    }
+}
+
+/// Observes the live spectrum only inside this small row, so an open settings
+/// window does not invalidate the whole form at the spectrum's publish rate.
+private struct VisualizerAudioStatusRow: View {
+    @ObservedObject private var spectrum = AudioSpectrumManager.shared
+
+    var body: some View {
         HStack {
             Image(systemName: spectrum.isSimulated ? "waveform.slash" : "waveform")
                 .foregroundStyle(spectrum.isSimulated ? .orange : .green)
