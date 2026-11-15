@@ -377,9 +377,30 @@ enum MusicVisualizerPainter {
         let line = frame.lyric.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
         let chars = Array(line)
-        // Left slot shows the first characters, right slot the rest.
-        let sliceChars = side == .left ? chars.prefix(6) : chars.suffix(6)
-        let shown = Array(sliceChars)
+        // Split at the natural boundary closest to the middle so the left
+        // slot carries the first half and the right slot the second half.
+        // Works for spaced English lines as well as CJK lyrics that only use
+        // punctuation between phrases.
+        let separators: Set<Character> = [
+            " ", ",", "，", "、", ".", "。", ";", "；", ":", "：", "?", "？", "!", "！",
+        ]
+        let midpoint = chars.count / 2
+        let separatorIndex = chars.indices
+            .filter { separators.contains(chars[$0]) }
+            .filter { $0 > 0 && $0 < chars.count - 1 }
+            .min { abs($0 - midpoint) < abs($1 - midpoint) }
+        let slice: ArraySlice<Character>
+        if let separatorIndex {
+            slice = side == .left
+                ? chars[..<separatorIndex]
+                : chars[(separatorIndex + 1)...]
+        } else {
+            slice = side == .left
+                ? chars.prefix((chars.count + 1) / 2)
+                : chars.suffix(chars.count / 2)
+        }
+        let shown = Array(
+            String(slice).trimmingCharacters(in: .whitespacesAndNewlines))
         guard !shown.isEmpty else { return }
 
         let baseFont = max(12, min(size.height * 0.26, 17))
@@ -389,17 +410,34 @@ enum MusicVisualizerPainter {
         let wavePhase = frame.time.truncatingRemainder(dividingBy: 2.4) / 2.4
         // Pre-measure every character so the row can be centered inside the
         // slot instead of starting from an edge and overflowing it.
-        let charWidths: [CGFloat] = shown.map { character in
-            let text = Text(String(character))
-                .font(.system(size: baseFont * 1.45, weight: .semibold, design: .rounded))
-            return context.resolve(text)
-                .measure(in: CGSize(width: size.width, height: size.height)).width
+        func measure(fontSize: CGFloat) -> [CGFloat] {
+            shown.map { character in
+                let text = Text(String(character))
+                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                return context.resolve(text)
+                    .measure(in: CGSize(width: size.width, height: size.height)).width
+            }
         }
-        let spacing: CGFloat = baseFont * 0.18
-        let totalWidth = charWidths.reduce(0, +) + spacing * CGFloat(max(0, shown.count - 1))
+        var fontSize = baseFont
+        var charWidths = measure(fontSize: fontSize)
+        var spacing = fontSize * 0.18
+        var totalWidth = charWidths.reduce(0, +)
+            + spacing * CGFloat(max(0, shown.count - 1))
+        // Shrink the row until the whole half-line fits the narrow corner slot.
+        let maxWidth = size.width * 0.86
+        if totalWidth > maxWidth {
+            let glyphWidth = charWidths.reduce(0, +)
+            let gapWidth = spacing * CGFloat(max(0, shown.count - 1))
+            let scale = max(0.45, (maxWidth - gapWidth) / max(glyphWidth, 1))
+            fontSize = max(8, fontSize * scale)
+            charWidths = measure(fontSize: fontSize)
+            spacing = fontSize * 0.18
+            totalWidth = charWidths.reduce(0, +)
+                + spacing * CGFloat(max(0, shown.count - 1))
+        }
         let startX = side == .left
-            ? min(size.width * 0.06, max(0, (size.width - totalWidth) / 2))
-            : max(size.width * 0.94 - totalWidth, size.width * 0.06)
+            ? size.width * 0.07
+            : size.width * 0.93 - totalWidth
         for (index, character) in shown.enumerated() {
             let progress = Double(index) / Double(max(1, shown.count - 1))
             let distance = abs(progress - wavePhase)
@@ -410,7 +448,7 @@ enum MusicVisualizerPainter {
             let alpha = min(1, 0.45 + 0.5 * bloom + 0.3 * Double(frame.beat))
 
             let text = Text(String(character))
-                .font(.system(size: baseFont * scale, weight: .semibold, design: .rounded))
+                .font(.system(size: fontSize * scale, weight: .semibold, design: .rounded))
                 .foregroundColor(color.opacity(min(1, alpha)))
             let resolved = context.resolve(text)
             let x = startX + charWidths.prefix(index).reduce(0, +) + CGFloat(index) * spacing
@@ -791,8 +829,6 @@ struct MusicVisualizerSlot: View {
 
     @Default(.musicVisualizerEnabled) private var enabled
     @Default(.musicVisualizerStyleLeft) private var leftStyle
-    @Default(.musicVisualizerStyleRight) private var rightStyle
-    @Default(.musicVisualizerSplit) private var split
     @Default(.musicVisualizerColorSource) private var colorSource
     @Default(.musicVisualizerCustomColor) private var customColorHex
     @Default(.musicVisualizerSensitivity) private var sensitivity
@@ -808,8 +844,7 @@ struct MusicVisualizerSlot: View {
 
     private var style: MusicVisualizerStyle {
         guard enabled else { return .off }
-        guard split else { return leftStyle }
-        return side == .left ? leftStyle : rightStyle
+        return leftStyle
     }
 
     private var tint: Color {
@@ -993,14 +1028,12 @@ extension Color {
 struct MusicVisualizerSettings: View {
     @Default(.musicVisualizerEnabled) private var enabled
     @Default(.musicVisualizerStyleLeft) private var leftStyle
-    @Default(.musicVisualizerStyleRight) private var rightStyle
-    @Default(.musicVisualizerSplit) private var split
     @Default(.musicVisualizerColorSource) private var colorSource
     @Default(.musicVisualizerCustomColor) private var customColorHex
     @Default(.musicVisualizerSensitivity) private var sensitivity
 
     private var usesAudio: Bool {
-        leftStyle.needsAudio || (split && rightStyle.needsAudio)
+        leftStyle.needsAudio
     }
 
     var body: some View {
@@ -1008,37 +1041,51 @@ struct MusicVisualizerSettings: View {
             Toggle("Show visualizer in player corners", isOn: $enabled)
 
             if enabled {
-                Picker("Left corner", selection: $leftStyle) {
-                    ForEach(MusicVisualizerStyle.allCases) { style in
-                        Label(style.title, systemImage: style.symbolName).tag(style)
-                    }
-                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Style")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
 
-                Toggle("Use a different style on the right", isOn: $split)
-
-                if split {
-                    Picker("Right corner", selection: $rightStyle) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 92), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
                         ForEach(MusicVisualizerStyle.allCases) { style in
-                            Label(style.title, systemImage: style.symbolName).tag(style)
+                            styleTile(style)
                         }
                     }
-                }
 
-                Picker("Colour", selection: $colorSource) {
-                    ForEach(VisualizerColorSource.allCases) { source in
-                        Text(source.title).tag(source)
+                    Text(leftStyle.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 2)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Colour")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        ForEach(VisualizerColorSource.allCases) { source in
+                            colorTile(source)
+                        }
+                        Spacer(minLength: 0)
+                    }
+
+                    if colorSource == .custom {
+                        ColorPicker(
+                            "Custom colour",
+                            selection: Binding(
+                                get: { Color(hex: customColorHex) ?? .white },
+                                set: { customColorHex = $0.hexString }
+                            )
+                        )
                     }
                 }
-
-                if colorSource == .custom {
-                    ColorPicker(
-                        "Custom colour",
-                        selection: Binding(
-                            get: { Color(hex: customColorHex) ?? .white },
-                            set: { customColorHex = $0.hexString }
-                        )
-                    )
-                }
+                .padding(.vertical, 2)
 
                 HStack {
                     Text("Sensitivity")
@@ -1052,6 +1099,95 @@ struct MusicVisualizerSettings: View {
                     audioStatusRow
                 }
             }
+        }
+    }
+
+    private func styleTile(_ style: MusicVisualizerStyle) -> some View {
+        let selected = leftStyle == style
+        return Button {
+            leftStyle = style
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: style.symbolName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(height: 18)
+                Text(style.title)
+                    .font(.caption2)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected
+                          ? Color.accentColor.opacity(0.16)
+                          : Color.primary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        selected ? Color.accentColor : Color.primary.opacity(0.08),
+                        lineWidth: selected ? 1.5 : 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(Text(style.summary))
+        .accessibilityLabel(Text(style.title))
+    }
+
+    private func colorTile(_ source: VisualizerColorSource) -> some View {
+        let selected = colorSource == source
+        return Button {
+            colorSource = source
+        } label: {
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle()
+                        .fill(swatch(for: source))
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+                    if source == .albumArt {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    if selected {
+                        Circle()
+                            .strokeBorder(Color.accentColor, lineWidth: 2)
+                            .padding(-3)
+                    }
+                }
+                .frame(width: 26, height: 26)
+                Text(source.title)
+                    .font(.caption2)
+                    .foregroundStyle(selected ? .primary : .secondary)
+            }
+            .frame(width: 64)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? Color.primary.opacity(0.06) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(source.title))
+    }
+
+    private func swatch(for source: VisualizerColorSource) -> AnyShapeStyle {
+        switch source {
+        case .albumArt:
+            return AnyShapeStyle(AngularGradient(
+                colors: [.pink, .orange, .yellow, .green, .cyan, .blue, .purple, .pink],
+                center: .center))
+        case .custom:
+            return AnyShapeStyle(Color(hex: customColorHex) ?? .white)
+        case .white:
+            return AnyShapeStyle(Color.white)
         }
     }
 

@@ -191,10 +191,6 @@ extension Defaults.Keys {
         "musicVisualizerEnabled", default: true)
     static let musicVisualizerStyleLeft = Key<MusicVisualizerStyle>(
         "musicVisualizerStyleLeft", default: .glow)
-    static let musicVisualizerStyleRight = Key<MusicVisualizerStyle>(
-        "musicVisualizerStyleRight", default: .glow)
-    static let musicVisualizerSplit = Key<Bool>(
-        "musicVisualizerSplit", default: false)
     static let musicVisualizerColorSource = Key<VisualizerColorSource>(
         "musicVisualizerColorSource", default: .albumArt)
     static let musicVisualizerCustomColor = Key<String>(
