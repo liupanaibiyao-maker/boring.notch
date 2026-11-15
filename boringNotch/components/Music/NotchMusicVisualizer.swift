@@ -467,7 +467,10 @@ struct MusicVisualizerSlot: View {
     let isVisible: Bool
 
     @ObservedObject private var music = MusicManager.shared
-    @ObservedObject private var spectrum = AudioSpectrumManager.shared
+    // Deliberately not @ObservedObject: the spectrum publishes at up to 30 Hz
+    // and would invalidate this body a second time on top of TimelineView.
+    // The canvas reads a snapshot each tick instead.
+    private let spectrum = AudioSpectrumManager.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Default(.musicVisualizerEnabled) private var enabled
@@ -483,6 +486,9 @@ struct MusicVisualizerSlot: View {
     @State private var lastEvent = Date.distantPast
     @State private var registered = false
     @State private var lastTrackKey = ""
+
+    private static let emptyBands = [Float](
+        repeating: 0, count: AudioSpectrumManager.bandCount)
 
     private var style: MusicVisualizerStyle {
         guard enabled else { return .off }
@@ -583,7 +589,7 @@ struct MusicVisualizerSlot: View {
         return MusicVisualizerFrame(
             time: date.timeIntervalSinceReferenceDate,
             level: animating ? spectrum.level : 0,
-            bands: animating ? spectrum.bands : Array(repeating: 0, count: AudioSpectrumManager.bandCount),
+            bands: animating ? spectrum.bands : Self.emptyBands,
             beat: animating ? spectrum.beat : 0,
             progress: progress,
             lyric: lyric,

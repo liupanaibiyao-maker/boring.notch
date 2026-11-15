@@ -12,6 +12,10 @@
 		<string>en</string>
 		<string>zh-Hans</string>
 	</array>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>boringNotch reads the system audio spectrum so the player visualizer can follow the music that is actually playing.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>boringNotch reads the system audio spectrum so the player visualizer can follow the music that is actually playing.</string>
 	<key>SUEnableDownloaderService</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>
