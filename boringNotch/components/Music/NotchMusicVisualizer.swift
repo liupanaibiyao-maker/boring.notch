@@ -180,12 +180,12 @@ enum RunnerFrameOrder {
 /// copies so the Canvas blits a pre-rendered image instead of re-tinting
 /// every frame.
 enum RunnerFrameCache {
-    private static var frameNames: [MusicVisualizerStyle: [String]] = [:]
+    private static var frameImages: [MusicVisualizerStyle: [NSImage]] = [:]
     private static var tinted: [String: NSImage] = [:]
 
     static func frames(for style: MusicVisualizerStyle) -> [NSImage] {
-        if let names = frameNames[style] {
-            return names.compactMap { NSImage(named: $0) }
+        if let cachedFrames = frameImages[style] {
+            return cachedFrames
         }
         let prefix = style.runnerAssetPrefix
         guard !prefix.isEmpty else { return [] }
@@ -196,8 +196,9 @@ enum RunnerFrameCache {
             index += 1
             if index > 64 { break }
         }
-        frameNames[style] = names
-        return names.compactMap { NSImage(named: $0) }
+        let loadedFrames = names.compactMap { NSImage(named: $0) }
+        frameImages[style] = loadedFrames
+        return loadedFrames
     }
 
     /// The frame order that gives each runner its characteristic motion.
@@ -213,7 +214,10 @@ enum RunnerFrameCache {
 
     /// Pre-tinted copy of `image` in `color` (the source is a black template).
     static func tinted(_ image: NSImage, with color: Color) -> NSImage {
-        let key = color.hexString + "-" + "\(Int(image.size.width))x\(Int(image.size.height))"
+        // Frame images and colour must both be part of the key: every sprite
+        // in a sheet shares the same dimensions, so a size-only key collapsed
+        // all frames into the first one and froze the animation.
+        let key = color.hexString + "-" + String(UInt(bitPattern: unsafeBitCast(ObjectIdentifier(image), to: Int.self)))
         if let cached = tinted[key] {
             return cached
         }
@@ -226,9 +230,7 @@ enum RunnerFrameCache {
         rect.fill(using: .sourceAtop)
         out.unlockFocus()
         out.isTemplate = false
-        if tinted.count > 96 {
-            for key in tinted.keys { tinted[key] = nil }
-        }
+        if tinted.count > 192 { tinted.removeAll() }
         tinted[key] = out
         return out
     }
@@ -503,6 +505,19 @@ enum MusicVisualizerPainter {
 
     // MARK: Runners (RunCat Neo frame sequences)
 
+    static func runnerSequenceIndex(
+        style: MusicVisualizerStyle, side: VisualizerSide,
+        time: Double, fps: Double, order: RunnerFrameOrder
+    ) -> Int {
+        // Drive the loop from the system's monotonic clock rather than the
+        // timeline's `date`: Canvas may redraw with an unchanged date (layout
+        // invalidations), which would freeze the sprite. CACurrentMediaTime
+        // always advances, so the run cycle keeps stepping.
+        let phase = CACurrentMediaTime() * fps
+        let count = Double(order.order.count)
+        return order.frame(at: Int(phase.truncatingRemainder(dividingBy: count)))
+    }
+
     private static func drawRunner(
         style: MusicVisualizerStyle,
         context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
@@ -512,13 +527,15 @@ enum MusicVisualizerPainter {
         guard let first = frames.first, frames.count > 0 else { return }
         let order = RunnerFrameCache.order(for: style)
 
-        // RunCat Neo drives the sprite at a steady 2 fps and only nudges the
-        // tempo with the load; the continuous clock keeps the walk cycle
-        // unbroken instead of restarting the frame index on every beat.
         let running = frame.isPlaying
-        let fps = running ? 2.0 + Double(frame.beat) * 3.0 : 1.0
-        let sequenceIndex = Int(frame.time * fps)
-        let frameNumber = order.frame(at: sequenceIndex)
+        // The reference loop completes in ~0.6s, which is a 5-frame sprite
+        // stepping at ~8 fps. Pick the rate from the cycle length so every
+        // runner (5 or 10 frames) keeps the same on-screen tempo, and let
+        // the beat swell the tempo by up to ~1.8x without ever rewinding.
+        let cycleSeconds = running ? 0.6 : 1.2
+        let tempo = running ? (1.0 + Double(frame.beat) * 0.8) : 1.0
+        let fps = Double(order.order.count) / (cycleSeconds / tempo)
+        let frameNumber = runnerSequenceIndex(style: style, side: side, time: frame.time, fps: fps, order: order)
         guard frameNumber < frames.count else { return }
         let frameImage = frames[frameNumber]
         let imageSize = first.size
@@ -531,13 +548,10 @@ enum MusicVisualizerPainter {
         let w = imageSize.width * fit
         let h = imageSize.height * fit
 
-        // The runner stays centred in the slot and bobs gently with the run
-        // cycle; only the leg/arm pose changes between frames, like RunCat.
-        let bobAmplitude = running ? h * 0.05 : h * 0.015
-        let bob = sin(frame.time * (running ? 8 : 2)) * bobAmplitude
-
+        // The runner stays centred in the slot, exactly like RunCat Neo:
+        // the sprite's own pose changes carry the motion, no extra bob.
         let x = (size.width - w) / 2
-        let y = size.height * 0.44 - h / 2 + bob
+        let y = size.height * 0.44 - h / 2
         let rect = CGRect(x: x, y: y, width: w, height: h)
 
         // Ground shadow
