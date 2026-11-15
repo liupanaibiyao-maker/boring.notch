@@ -121,7 +121,7 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
         case .coffee: return "coffee"
         case .engine: return "engine"
         case .mochi: return "mochi"
-        case .newton: return "newton"
+        case .newton: return "newton-cradle"
         default: return ""
         }
     }
@@ -149,7 +149,32 @@ enum VisualizerSide {
 }
 
 
-// MARK: - Runner frame cache (RunCat Neo sprite sheets, Apache-2.0)
+// MARK: - Runner frame cache (ported from RunCat Neo, Apache-2.0)
+
+/// Frame ordering copied from RunCat Neo's `FrameOrder`. Each runner has a
+/// distinct motion: most run forwards, mochi swings back and forth, Newton's
+/// cradle pendulums, and slime pauses at its squashed extreme.
+enum RunnerFrameOrder {
+    case ascending(Int)
+    case swing
+    case pendulum
+    case partyHorn
+
+    var order: [Int] {
+        switch self {
+        case let .ascending(n): return Array(0 ..< n)
+        case .swing: return [0, 1, 2, 3, 4, 3, 2, 1]
+        case .pendulum: return [0, 1, 2, 1, 0, 3, 4, 3]
+        case .partyHorn: return [0, 1, 2, 3, 4, 4, 3, 2, 1]
+        }
+    }
+
+    func frame(at index: Int) -> Int {
+        let order = order
+        guard !order.isEmpty else { return 0 }
+        return order[index % order.count]
+    }
+}
 
 /// Loads the runner sprite frames and caches per-(color, frame) tinted
 /// copies so the Canvas blits a pre-rendered image instead of re-tinting
@@ -173,6 +198,17 @@ enum RunnerFrameCache {
         }
         frameNames[style] = names
         return names.compactMap { NSImage(named: $0) }
+    }
+
+    /// The frame order that gives each runner its characteristic motion.
+    static func order(for style: MusicVisualizerStyle) -> RunnerFrameOrder {
+        let count = frames(for: style).count
+        switch style {
+        case .mochi: return .swing
+        case .newton: return .pendulum
+        case .slime: return .partyHorn
+        default: return .ascending(count)
+        }
     }
 
     /// Pre-tinted copy of `image` in `color` (the source is a black template).
@@ -474,41 +510,42 @@ enum MusicVisualizerPainter {
     ) {
         let frames = RunnerFrameCache.frames(for: style)
         guard let first = frames.first, frames.count > 0 else { return }
+        let order = RunnerFrameCache.order(for: style)
 
-        // Frame rate scales with the beat so the run feels music-driven.
-        let fps = 2.0 + Double(frame.beat) * 4.0
-        let index = min(frames.count - 1, Int(frame.time * fps) % frames.count)
-        let frameImage = frames[index]
+        // RunCat Neo drives the sprite at a steady 2 fps and only nudges the
+        // tempo with the load; the continuous clock keeps the walk cycle
+        // unbroken instead of restarting the frame index on every beat.
+        let running = frame.isPlaying
+        let fps = running ? 2.0 + Double(frame.beat) * 3.0 : 1.0
+        let sequenceIndex = Int(frame.time * fps)
+        let frameNumber = order.frame(at: sequenceIndex)
+        guard frameNumber < frames.count else { return }
+        let frameImage = frames[frameNumber]
         let imageSize = first.size
         guard imageSize.width > 1, imageSize.height > 1 else { return }
 
         // Fit the runner into the slot.
-        let maxHeight = size.height * 0.52
-        let maxWidth = size.width * 0.8
+        let maxHeight = size.height * 0.6
+        let maxWidth = size.width * 0.62
         let fit = min(maxHeight / imageSize.height, maxWidth / imageSize.width, 1.6)
         let w = imageSize.width * fit
         let h = imageSize.height * fit
 
-        // Travel across the slot and wrap; speed scales with beat.
-        let running = frame.isPlaying
-        let speed: Double = running ? (1.0 + 1.6 * Double(frame.beat)) : 0.4
-        let cycle = 3.6 / max(0.2, speed)
-        let progress: Double = running
-            ? frame.time.truncatingRemainder(dividingBy: cycle) / cycle
-            : 0.5
-        let bobAmplitude = running ? h * 0.06 : h * 0.02
-        let bob = sin(frame.time * (running ? 16 : 3)) * bobAmplitude
+        // The runner stays centred in the slot and bobs gently with the run
+        // cycle; only the leg/arm pose changes between frames, like RunCat.
+        let bobAmplitude = running ? h * 0.05 : h * 0.015
+        let bob = sin(frame.time * (running ? 8 : 2)) * bobAmplitude
 
-        let x = size.width * (0.06 + 0.8 * progress) - w / 2
-        let y = size.height * 0.42 - h / 2 + bob
+        let x = (size.width - w) / 2
+        let y = size.height * 0.44 - h / 2 + bob
         let rect = CGRect(x: x, y: y, width: w, height: h)
 
         // Ground shadow
-        let shadowWidth = w * (running ? 0.8 : 0.6)
+        let shadowWidth = w * 0.85
         let shadow = CGRect(
             x: x + (w - shadowWidth) / 2,
-            y: size.height * 0.42 + h * 0.52,
-            width: shadowWidth, height: h * 0.1)
+            y: size.height * 0.44 + h * 0.5,
+            width: shadowWidth, height: h * 0.09)
         context.drawLayer { layer in
             layer.addFilter(.blur(radius: 1.5))
             layer.fill(Path(ellipseIn: shadow), with: .color(color.opacity(0.15)))
