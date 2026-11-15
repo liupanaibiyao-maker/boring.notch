@@ -150,6 +150,16 @@ struct MusicControlsView: View {
     @ObservedObject var musicManager = MusicManager.shared
         @EnvironmentObject var vm: BoringViewModel
     @Default(.lyricsGlow) private var lyricsGlow
+    @Default(.lyricsGlowColorData) private var lyricsGlowColorData
+    @Default(.lyricsGlowStrength) private var lyricsGlowStrength
+
+    private var lyricsGlowColor: Color {
+        if let data = lyricsGlowColorData,
+           let nsColor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
+            return Color(nsColor: nsColor)
+        }
+        return .effectiveAccent
+    }
     @State private var sliderValue: Double = 0
     @State private var dragging: Bool = false
     @State private var lastDragged: Date = .distantPast
@@ -217,32 +227,42 @@ struct MusicControlsView: View {
                 return v >= 0x0600 && v <= 0x06FF
             }
             if lyricsGlow {
-                Text(LocalizedStringKey(line))
-                    .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
-                    .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .shadow(color: Color.effectiveAccent.opacity(0.9), radius: 6)
-                    .shadow(color: Color.effectiveAccent.opacity(0.55), radius: 14)
-                    .shadow(color: Color.effectiveAccent.opacity(0.3), radius: 24)
-                    .offset(x: -toolbarCenterOffset)
-                    .opacity(musicManager.isPlaying ? 1 : 0)
-                    .transition(.opacity)
+                ZStack {
+                    Text(LocalizedStringKey(line))
+                        .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
+                        .foregroundColor(lyricsGlowColor)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .blur(radius: 2.5 + 2.5 * lyricsGlowStrength)
+                        .opacity(0.85 * min(1.4, lyricsGlowStrength))
+                    lyricsText(for: line, isPersian: isPersian)
+                        .shadow(color: lyricsGlowColor.opacity(min(1, 0.9 * lyricsGlowStrength)), radius: 3 + 3 * lyricsGlowStrength)
+                        .shadow(color: lyricsGlowColor.opacity(min(0.9, 0.65 * lyricsGlowStrength)), radius: 10 + 10 * lyricsGlowStrength)
+                        .shadow(color: lyricsGlowColor.opacity(min(0.8, 0.45 * lyricsGlowStrength)), radius: 24 + 20 * lyricsGlowStrength)
+                }
+                .offset(x: -toolbarCenterOffset)
+                .opacity(musicManager.isPlaying ? 1 : 0)
+                .transition(.opacity)
             } else {
-                Text(LocalizedStringKey(line))
-                    .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
-                    .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                lyricsText(for: line, isPersian: isPersian)
                     .offset(x: -toolbarCenterOffset)
                     .opacity(musicManager.isPlaying ? 1 : 0)
                     .transition(.opacity)
             }
         }
+    }
+
+    @ViewBuilder
+    private func lyricsText(for line: String, isPersian: Bool) -> some View {
+        Text(LocalizedStringKey(line))
+            .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
+            .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var musicSlider: some View {

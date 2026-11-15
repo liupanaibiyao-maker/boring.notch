@@ -21,10 +21,15 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
     case lyric
     case arc
     case cat
+    case dog
+    case slime
+    case drop
+    case coffee
+    case engine
+    case mochi
+    case newton
     case stars
     case dot
-    case custom
-
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
@@ -35,9 +40,15 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
         case .lyric: return "Lyric trace"
         case .arc: return "Progress arc"
         case .cat: return "Jumping cat"
+        case .dog: return "Running dog"
+        case .slime: return "Slime"
+        case .drop: return "Drop"
+        case .coffee: return "Coffee"
+        case .engine: return "Engine"
+        case .mochi: return "Mochi"
+        case .newton: return "Newton's cradle"
         case .stars: return "Beat stars"
         case .dot: return "Status dot"
-        case .custom: return "Custom graphic"
         }
     }
 
@@ -49,9 +60,15 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
         case .lyric: return "A faint ghost of the current lyric line."
         case .arc: return "A hairline arc that follows playback progress."
         case .cat: return "A neon line cat that hops on every beat."
+        case .dog: return "A small dog jogging along."
+        case .slime: return "A squishing slime blob."
+        case .drop: return "A bouncing droplet."
+        case .coffee: return "Steam rising from a coffee cup."
+        case .engine: return "A tiny engine firing on the beat."
+        case .mochi: return "A mochi squashing to the rhythm."
+        case .newton: return "A Newton's cradle swinging."
         case .stars: return "Faint stars that light up and connect on beats."
         case .dot: return "Almost always black; one faint dot per playback event."
-        case .custom: return "Your own image, pulsing with the music."
         }
     }
 
@@ -63,17 +80,49 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
         case .lyric: return "text.quote"
         case .arc: return "circle.dashed"
         case .cat: return "cat.fill"
+        case .dog: return "dog.fill"
+        case .slime: return "drop.fill"
+        case .drop: return "drop"
+        case .coffee: return "cup.and.saucer.fill"
+        case .engine: return "flame.fill"
+        case .mochi: return "circle.grid.2x2.fill"
+        case .newton: return "circle.hexagongrid.fill"
         case .stars: return "sparkles"
         case .dot: return "circle.fill"
-        case .custom: return "photo"
         }
     }
 
     /// Styles that do not need the audio tap at all.
     var needsAudio: Bool {
         switch self {
-        case .glow, .spectrum, .cat, .stars, .custom, .dot: return true
+        case .glow, .spectrum, .cat, .dog, .slime, .drop, .coffee,
+             .engine, .mochi, .newton, .stars, .dot: return true
         case .off, .lyric, .arc: return false
+        }
+    }
+
+    /// Runner styles rendered from RunCat Neo sprite sheets (Apache-2.0).
+    var isRunner: Bool {
+        switch self {
+        case .cat, .dog, .slime, .drop, .coffee, .engine, .mochi, .newton:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Asset prefix of the sprite sheet frames.
+    var runnerAssetPrefix: String {
+        switch self {
+        case .cat: return "cat"
+        case .dog: return "dog"
+        case .slime: return "slime"
+        case .drop: return "drop"
+        case .coffee: return "coffee"
+        case .engine: return "engine"
+        case .mochi: return "mochi"
+        case .newton: return "newton"
+        default: return ""
         }
     }
 }
@@ -99,41 +148,53 @@ enum VisualizerSide {
     case right
 }
 
-// MARK: - Custom image storage
 
-enum CustomVisualizerStore {
-    static var directory: URL {
-        let base = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first ?? FileManager.default.temporaryDirectory
-        let folder = base
-            .appendingPathComponent("boringNotch", isDirectory: true)
-            .appendingPathComponent("Visualizers", isDirectory: true)
-        try? FileManager.default.createDirectory(
-            at: folder, withIntermediateDirectories: true)
-        return folder
+// MARK: - Runner frame cache (RunCat Neo sprite sheets, Apache-2.0)
+
+/// Loads the runner sprite frames and caches per-(color, frame) tinted
+/// copies so the Canvas blits a pre-rendered image instead of re-tinting
+/// every frame.
+enum RunnerFrameCache {
+    private static var frameNames: [MusicVisualizerStyle: [String]] = [:]
+    private static var tinted: [String: NSImage] = [:]
+
+    static func frames(for style: MusicVisualizerStyle) -> [NSImage] {
+        if let names = frameNames[style] {
+            return names.compactMap { NSImage(named: $0) }
+        }
+        let prefix = style.runnerAssetPrefix
+        guard !prefix.isEmpty else { return [] }
+        var names: [String] = []
+        var index = 0
+        while NSImage(named: "\(prefix)-frame-\(index)") != nil {
+            names.append("\(prefix)-frame-\(index)")
+            index += 1
+            if index > 64 { break }
+        }
+        frameNames[style] = names
+        return names.compactMap { NSImage(named: $0) }
     }
 
-    static func importImage(from url: URL) throws -> String {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: url)
-        let ext = url.pathExtension.isEmpty ? "png" : url.pathExtension
-        let name = "custom-\(UUID().uuidString.prefix(8)).\(ext)"
-        let destination = directory.appendingPathComponent(name)
-        try data.write(to: destination, options: .atomic)
-        return name
-    }
-
-    static func image(named name: String) -> NSImage? {
-        guard !name.isEmpty else { return nil }
-        let url = directory.appendingPathComponent(name)
-        return NSImage(contentsOf: url)
-    }
-
-    static func remove(named name: String) {
-        guard !name.isEmpty else { return }
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+    /// Pre-tinted copy of `image` in `color` (the source is a black template).
+    static func tinted(_ image: NSImage, with color: Color) -> NSImage {
+        let key = color.hexString + "-" + "\(Int(image.size.width))x\(Int(image.size.height))"
+        if let cached = tinted[key] {
+            return cached
+        }
+        let size = image.size
+        let out = NSImage(size: size)
+        out.lockFocus()
+        let rect = NSRect(origin: .zero, size: size)
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+        NSColor(color).set()
+        rect.fill(using: .sourceAtop)
+        out.unlockFocus()
+        out.isTemplate = false
+        if tinted.count > 96 {
+            for key in tinted.keys { tinted[key] = nil }
+        }
+        tinted[key] = out
+        return out
     }
 }
 
@@ -178,12 +239,24 @@ enum MusicVisualizerPainter {
             drawArc(context: &context, size: size, frame: frame, color: color, side: side)
         case .cat:
             drawCat(context: &context, size: size, frame: frame, color: color, side: side)
+        case .dog:
+            drawDog(context: &context, size: size, frame: frame, color: color, side: side)
+        case .slime:
+            drawSlime(context: &context, size: size, frame: frame, color: color, side: side)
+        case .drop:
+            drawDrop(context: &context, size: size, frame: frame, color: color, side: side)
+        case .coffee:
+            drawCoffee(context: &context, size: size, frame: frame, color: color, side: side)
+        case .engine:
+            drawEngine(context: &context, size: size, frame: frame, color: color, side: side)
+        case .mochi:
+            drawMochi(context: &context, size: size, frame: frame, color: color, side: side)
+        case .newton:
+            drawNewton(context: &context, size: size, frame: frame, color: color, side: side)
         case .stars:
             drawStars(context: &context, size: size, frame: frame, color: color, side: side)
         case .dot:
             drawDot(context: &context, size: size, frame: frame, color: color)
-        case .custom:
-            break
         }
     }
 
@@ -265,22 +338,53 @@ enum MusicVisualizerPainter {
     ) {
         let line = frame.lyric.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
-        let characters = Array(line)
-        let slice = side == .left
-            ? String(characters.prefix(9))
-            : String(characters.suffix(9))
-        guard !slice.isEmpty else { return }
+        let chars = Array(line)
+        // Left slot shows the first characters, right slot the rest.
+        let sliceChars = side == .left ? chars.prefix(6) : chars.suffix(6)
+        let shown = Array(sliceChars)
+        guard !shown.isEmpty else { return }
 
-        let text = Text(slice)
-            .font(.system(size: max(9, min(size.height * 0.22, 13)), weight: .medium))
-            .foregroundColor(color.opacity(0.55))
-        let resolved = context.resolve(text)
-        let point = CGPoint(
-            x: size.width * (side == .left ? 0.34 : 0.66),
-            y: size.height * 0.5)
-        context.drawLayer { layer in
-            layer.addFilter(.blur(radius: 1.6))
-            layer.draw(resolved, at: point, anchor: .center)
+        let baseFont = max(12, min(size.height * 0.26, 17))
+
+        // A gentle "bloom" wave rolls through the characters; each char grows
+        // and glows like a petal opening as the wave passes.
+        let wavePhase = frame.time.truncatingRemainder(dividingBy: 2.4) / 2.4
+        // Pre-measure every character so the row can be centered inside the
+        // slot instead of starting from an edge and overflowing it.
+        let charWidths: [CGFloat] = shown.map { character in
+            let text = Text(String(character))
+                .font(.system(size: baseFont * 1.45, weight: .semibold, design: .rounded))
+            return context.resolve(text)
+                .measure(in: CGSize(width: size.width, height: size.height)).width
+        }
+        let spacing: CGFloat = baseFont * 0.18
+        let totalWidth = charWidths.reduce(0, +) + spacing * CGFloat(max(0, shown.count - 1))
+        let startX = side == .left
+            ? min(size.width * 0.06, max(0, (size.width - totalWidth) / 2))
+            : max(size.width * 0.94 - totalWidth, size.width * 0.06)
+        for (index, character) in shown.enumerated() {
+            let progress = Double(index) / Double(max(1, shown.count - 1))
+            let distance = abs(progress - wavePhase)
+            let falloff = min(distance, 1 - distance)
+            let bloom = max(0, 1 - falloff * 3.2)
+            let beatBoost = bloom * Double(frame.beat)
+            let scale = 1 + 0.45 * bloom + 0.5 * beatBoost
+            let alpha = min(1, 0.45 + 0.5 * bloom + 0.3 * Double(frame.beat))
+
+            let text = Text(String(character))
+                .font(.system(size: baseFont * scale, weight: .semibold, design: .rounded))
+                .foregroundColor(color.opacity(min(1, alpha)))
+            let resolved = context.resolve(text)
+            let x = startX + charWidths.prefix(index).reduce(0, +) + CGFloat(index) * spacing
+            let y = size.height * 0.5
+
+            if bloom > 0.15 {
+                context.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 3 + 4 * bloom))
+                    layer.draw(resolved, at: CGPoint(x: x, y: y), anchor: .leading)
+                }
+            }
+            context.draw(resolved, at: CGPoint(x: x, y: y), anchor: .leading)
         }
     }
 
@@ -303,70 +407,186 @@ enum MusicVisualizerPainter {
                 startAngle: .degrees(182), endAngle: .degrees(268), clockwise: false)
         }
         let progress = max(0, min(1, frame.progress))
-        let trimmed = path.trimmedPath(from: 0, to: CGFloat(progress))
+
+        // Track
         context.stroke(
-            trimmed, with: .color(color.opacity(0.55)),
-            style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-        context.stroke(
-            path, with: .color(color.opacity(0.07)),
+            path, with: .color(color.opacity(0.08)),
             style: StrokeStyle(lineWidth: 1.0, lineCap: .round))
+
+        // Progress fill, with a soft breathing glow synced to the beat.
+        let pulse = 0.5 + 0.5 * sin(frame.time * 2.2)
+        let glowWidth = 2.2 + CGFloat(frame.beat) * 2.2 + pulse * 0.5
+        let trimmed = path.trimmedPath(from: 0, to: CGFloat(progress))
+        if progress > 0.002 {
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: 3.5 + CGFloat(frame.beat) * 3))
+                layer.stroke(
+                    trimmed, with: .color(color.opacity(0.55)),
+                    style: StrokeStyle(lineWidth: glowWidth + 2, lineCap: .round))
+            }
+            context.stroke(
+                trimmed, with: .color(color.opacity(0.9)),
+                style: StrokeStyle(lineWidth: glowWidth, lineCap: .round))
+
+            // Trailing dot: sits at the progress tip and pulses.
+            let tip = trimmed.currentPoint ?? center
+            let dotRadius = 2.6 + CGFloat(frame.beat) * 1.6 + pulse * 0.7
+            let dotRect = CGRect(
+                x: tip.x - dotRadius, y: tip.y - dotRadius,
+                width: dotRadius * 2, height: dotRadius * 2)
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: 4))
+                layer.fill(Path(ellipseIn: dotRect.insetBy(dx: -3, dy: -3)),
+                          with: .color(color.opacity(0.4)))
+            }
+            context.fill(Path(ellipseIn: dotRect), with: .color(color.opacity(0.95)))
+        }
+
+        // A comet that continually travels along the full arc so the effect
+        // is visibly in motion even while the song's progress barely moves.
+        let cometPeriod = 5.0
+        let cometPhase = frame.time.truncatingRemainder(dividingBy: cometPeriod) / cometPeriod
+        let cometEnd = 0.06
+        let cometTrim = path.trimmedPath(from: max(0, cometPhase - cometEnd), to: cometPhase)
+        context.drawLayer { layer in
+            layer.addFilter(.blur(radius: 2.5))
+            layer.stroke(
+                cometTrim, with: .color(color.opacity(0.5)),
+                style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+        }
+        let cometHead = cometTrim.currentPoint ?? center
+        let cometRadius = 1.6 + pulse * 0.6
+        context.fill(
+            Path(ellipseIn: CGRect(
+                x: cometHead.x - cometRadius, y: cometHead.y - cometRadius,
+                width: cometRadius * 2, height: cometRadius * 2)),
+            with: .color(color.opacity(0.75)))
     }
 
     // MARK: Cat
+
+    // MARK: Runners (RunCat Neo frame sequences)
+
+    private static func drawRunner(
+        style: MusicVisualizerStyle,
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        let frames = RunnerFrameCache.frames(for: style)
+        guard let first = frames.first, frames.count > 0 else { return }
+
+        // Frame rate scales with the beat so the run feels music-driven.
+        let fps = 2.0 + Double(frame.beat) * 4.0
+        let index = min(frames.count - 1, Int(frame.time * fps) % frames.count)
+        let frameImage = frames[index]
+        let imageSize = first.size
+        guard imageSize.width > 1, imageSize.height > 1 else { return }
+
+        // Fit the runner into the slot.
+        let maxHeight = size.height * 0.52
+        let maxWidth = size.width * 0.8
+        let fit = min(maxHeight / imageSize.height, maxWidth / imageSize.width, 1.6)
+        let w = imageSize.width * fit
+        let h = imageSize.height * fit
+
+        // Travel across the slot and wrap; speed scales with beat.
+        let running = frame.isPlaying
+        let speed: Double = running ? (1.0 + 1.6 * Double(frame.beat)) : 0.4
+        let cycle = 3.6 / max(0.2, speed)
+        let progress: Double = running
+            ? frame.time.truncatingRemainder(dividingBy: cycle) / cycle
+            : 0.5
+        let bobAmplitude = running ? h * 0.06 : h * 0.02
+        let bob = sin(frame.time * (running ? 16 : 3)) * bobAmplitude
+
+        let x = size.width * (0.06 + 0.8 * progress) - w / 2
+        let y = size.height * 0.42 - h / 2 + bob
+        let rect = CGRect(x: x, y: y, width: w, height: h)
+
+        // Ground shadow
+        let shadowWidth = w * (running ? 0.8 : 0.6)
+        let shadow = CGRect(
+            x: x + (w - shadowWidth) / 2,
+            y: size.height * 0.42 + h * 0.52,
+            width: shadowWidth, height: h * 0.1)
+        context.drawLayer { layer in
+            layer.addFilter(.blur(radius: 1.5))
+            layer.fill(Path(ellipseIn: shadow), with: .color(color.opacity(0.15)))
+        }
+
+        // Tinted silhouette: draw the black template, then paint it with the
+        // tint colour on top (sourceAtop keeps the silhouette shape).
+        let tinted = RunnerFrameCache.tinted(frameImage, with: color)
+        let resolved = context.resolve(Image(nsImage: tinted))
+        context.draw(resolved, in: rect)
+
+        // Beat glow behind the runner
+        if frame.beat > 0.15 {
+            let beat = CGFloat(frame.beat)
+            let glowRadius = w * (0.7 + beat * 0.4)
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: glowRadius * 0.5))
+                layer.fill(
+                    Path(ellipseIn: rect.insetBy(dx: -glowRadius * 0.2, dy: -glowRadius * 0.2)),
+                    with: .color(color.opacity(beat * 0.25)))
+            }
+        }
+    }
 
     private static func drawCat(
         context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
         color: Color, side: VisualizerSide
     ) {
-        let beat = CGFloat(frame.beat)
-        let scale = min(size.width, size.height) / 60
-        let jump = -beat * 6 * scale
-        let center = CGPoint(
-            x: size.width * (side == .left ? 0.46 : 0.54),
-            y: size.height * 0.58 + jump)
+        drawRunner(style: .cat, context: &context, size: size, frame: frame, color: color, side: side)
+    }
 
-        var cat = Path()
-        // Body
-        cat.addEllipse(in: CGRect(
-            x: center.x - 13 * scale, y: center.y - 2 * scale,
-            width: 26 * scale, height: 18 * scale))
-        // Head
-        cat.addEllipse(in: CGRect(
-            x: center.x - 10 * scale, y: center.y - 17 * scale,
-            width: 20 * scale, height: 16 * scale))
-        // Ears
-        cat.move(to: CGPoint(x: center.x - 9 * scale, y: center.y - 13 * scale))
-        cat.addLine(to: CGPoint(x: center.x - 11 * scale, y: center.y - 23 * scale))
-        cat.addLine(to: CGPoint(x: center.x - 3 * scale, y: center.y - 17 * scale))
-        cat.closeSubpath()
-        cat.move(to: CGPoint(x: center.x + 9 * scale, y: center.y - 13 * scale))
-        cat.addLine(to: CGPoint(x: center.x + 11 * scale, y: center.y - 23 * scale))
-        cat.addLine(to: CGPoint(x: center.x + 3 * scale, y: center.y - 17 * scale))
-        cat.closeSubpath()
+    private static func drawDog(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .dog, context: &context, size: size, frame: frame, color: color, side: side)
+    }
 
-        // Tail
-        let tailSwing = CGFloat(sin(frame.time * 4)) * 4 * scale
-        cat.move(to: CGPoint(x: center.x + 12 * scale, y: center.y + 8 * scale))
-        cat.addQuadCurve(
-            to: CGPoint(x: center.x + 20 * scale + tailSwing, y: center.y - 2 * scale),
-            control: CGPoint(x: center.x + 22 * scale, y: center.y + 10 * scale))
+    private static func drawSlime(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .slime, context: &context, size: size, frame: frame, color: color, side: side)
+    }
 
-        context.stroke(
-            cat, with: .color(color.opacity(0.8)),
-            style: StrokeStyle(lineWidth: 1.4 * scale, lineCap: .round, lineJoin: .round))
+    private static func drawDrop(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .drop, context: &context, size: size, frame: frame, color: color, side: side)
+    }
 
-        // Eyes (blink roughly every 4 seconds)
-        let blink = sin(frame.time * 0.8) > 0.97
-        if !blink {
-            var eyes = Path()
-            eyes.addEllipse(in: CGRect(
-                x: center.x - 6 * scale, y: center.y - 11 * scale,
-                width: 2.2 * scale, height: 2.2 * scale))
-            eyes.addEllipse(in: CGRect(
-                x: center.x + 3.8 * scale, y: center.y - 11 * scale,
-                width: 2.2 * scale, height: 2.2 * scale))
-            context.fill(eyes, with: .color(color.opacity(0.95)))
-        }
+    private static func drawCoffee(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .coffee, context: &context, size: size, frame: frame, color: color, side: side)
+    }
+
+    private static func drawEngine(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .engine, context: &context, size: size, frame: frame, color: color, side: side)
+    }
+
+    private static func drawMochi(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .mochi, context: &context, size: size, frame: frame, color: color, side: side)
+    }
+
+    private static func drawNewton(
+        context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
+        color: Color, side: VisualizerSide
+    ) {
+        drawRunner(style: .newton, context: &context, size: size, frame: frame, color: color, side: side)
     }
 
     // MARK: Stars
@@ -440,18 +660,63 @@ enum MusicVisualizerPainter {
         context: inout GraphicsContext, size: CGSize, frame: MusicVisualizerFrame,
         color: Color
     ) {
-        guard frame.eventPulse > 0.01 else { return }
-        let radius = 2.2 + 3.2 * CGFloat(frame.eventPulse)
-        let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
-        let rect = CGRect(
-            x: center.x - radius, y: center.y - radius,
-            width: radius * 2, height: radius * 2)
+        let center = CGPoint(x: size.width * 0.5, y: size.height * 0.55)
+        // A steady, always-visible status dot that breathes with the beat.
+        let breathing = frame.isPlaying ? (0.5 + 0.5 * sin(frame.time * 1.8)) : 0
+        let baseRadius = 5.0 + CGFloat(breathing) * 2.0 + CGFloat(frame.beat) * 2.5
+
+        // A permanent outer ring so the status point is clearly visible at a
+        // glance, with a soft breathing glow around it.
+        let ringRadius = baseRadius + 5
         context.drawLayer { layer in
-            layer.addFilter(.blur(radius: 1.4))
-            layer.fill(
-                Path(ellipseIn: rect),
-                with: .color(color.opacity(Double(frame.eventPulse) * 0.7)))
+            layer.addFilter(.blur(radius: 2))
+            layer.stroke(
+                Path(ellipseIn: CGRect(
+                    x: center.x - ringRadius, y: center.y - ringRadius,
+                    width: ringRadius * 2, height: ringRadius * 2)),
+                with: .color(color.opacity(0.35 + Double(breathing) * 0.25)),
+                style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
         }
+
+        // Expanding pulse rings while an event pulse is active.
+        if frame.eventPulse > 0.01 {
+            let ringProgress = 1 - frame.eventPulse // grows from 0 to 1
+            let pulseRingRadius = baseRadius + 12 * CGFloat(ringProgress)
+            let ringAlpha = frame.eventPulse * 0.5
+            context.stroke(
+                Path(ellipseIn: CGRect(
+                    x: center.x - pulseRingRadius, y: center.y - pulseRingRadius,
+                    width: pulseRingRadius * 2, height: pulseRingRadius * 2)),
+                with: .color(color.opacity(ringAlpha)),
+                style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            let glowRadius = baseRadius + 2.5 * CGFloat(frame.eventPulse)
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: 3))
+                layer.fill(
+                    Path(ellipseIn: CGRect(
+                        x: center.x - glowRadius, y: center.y - glowRadius,
+                        width: glowRadius * 2, height: glowRadius * 2)),
+                    with: .color(color.opacity(0.35 * frame.eventPulse)))
+            }
+        }
+
+        // Soft halo
+        let halo = baseRadius * 2.0
+        context.drawLayer { layer in
+            layer.addFilter(.blur(radius: 6))
+            layer.fill(
+                Path(ellipseIn: CGRect(
+                    x: center.x - halo, y: center.y - halo,
+                    width: halo * 2, height: halo * 2)),
+                with: .color(color.opacity(0.3 + Double(breathing) * 0.2)))
+        }
+
+        // Core
+        context.fill(
+            Path(ellipseIn: CGRect(
+                x: center.x - baseRadius, y: center.y - baseRadius,
+                width: baseRadius * 2, height: baseRadius * 2)),
+            with: .color(color.opacity(frame.isPlaying ? 0.95 : 0.55)))
     }
 
     static func rand(_ value: Double) -> Double {
@@ -480,12 +745,12 @@ struct MusicVisualizerSlot: View {
     @Default(.musicVisualizerColorSource) private var colorSource
     @Default(.musicVisualizerCustomColor) private var customColorHex
     @Default(.musicVisualizerSensitivity) private var sensitivity
-    @Default(.musicVisualizerCustomImage) private var customImageName
 
     @State private var eventPulse: Double = 0
     @State private var lastEvent = Date.distantPast
     @State private var registered = false
     @State private var lastTrackKey = ""
+    @State private var notes: [NoteBurst] = []
 
     private static let emptyBands = [Float](
         repeating: 0, count: AudioSpectrumManager.bandCount)
@@ -513,7 +778,11 @@ struct MusicVisualizerSlot: View {
 
     var body: some View {
         content
-            .allowsHitTesting(false)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard style != .off, isVisible else { return }
+                spawnNotes()
+            }
             .onAppear { syncAudio(active: true) }
             .onDisappear { syncAudio(active: false) }
             .onChange(of: isVisible) { syncAudio(active: true) }
@@ -527,9 +796,7 @@ struct MusicVisualizerSlot: View {
 
     @ViewBuilder
     private var content: some View {
-        if style == .custom, let image = CustomVisualizerStore.image(named: customImageName) {
-            customGraphic(image: image)
-        } else {
+        ZStack {
             TimelineView(.animation(
                 minimumInterval: interval, paused: !animating
             )) { timeline in
@@ -540,33 +807,65 @@ struct MusicVisualizerSlot: View {
                         color: tint, sensitivity: sensitivity, side: side)
                 }
             }
+
+            ForEach(notes) { note in
+                GeometryReader { geo in
+                    NoteView(color: tint, rotation: note.rotation, symbol: note.symbol)
+                        .position(x: note.origin.x * geo.size.width,
+                                  y: note.origin.y * geo.size.height)
+                }
+                    .offset(y: note.animate ? -note.rise : 0)
+                    .opacity(note.animate ? 0 : 0.9)
+                    .scaleEffect(note.animate ? 1.25 : 0.7)
+                    .animation(.easeOut(duration: 1.1), value: note.animate)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
     private var interval: Double {
         switch style {
-        case .lyric, .arc, .dot: return 1.0 / 8.0
-        case .glow: return 1.0 / 20.0
+        case .lyric, .arc, .dot, .glow: return 1.0 / 20.0
         default: return 1.0 / 30.0
         }
     }
 
-    @ViewBuilder
-    private func customGraphic(image: NSImage) -> some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animating)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let beat = animating ? Double(spectrum.beat) : 0
-            let scale = 0.9 + beat * 0.12
-            let glow = 0.25 + Double(spectrum.level) * 0.5 + beat * 0.25
-            Image(nsImage: image)
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .foregroundStyle(tint.opacity(0.35 + glow * 0.55))
-                .scaleEffect(scale)
-                .shadow(color: tint.opacity(glow * 0.6), radius: 6 + glow * 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .rotationEffect(.degrees(sin(t * 0.5) * 1.5))
+    // MARK: - Click note burst
+
+    private struct NoteBurst: Identifiable {
+        let id = UUID()
+        var origin: CGPoint = .zero
+        var rotation: Double = 0
+        var rise: CGFloat = 0
+        var symbol: String = "music.note"
+        var animate = false
+    }
+
+    private func spawnNotes() {
+        let symbols = ["music.note", "music.quarternote.3", "music.note.list", "sparkle"]
+        let count = Int.random(in: 3...5)
+        var spawned: [NoteBurst] = []
+        for _ in 0..<count {
+            var burst = NoteBurst()
+            burst.origin = CGPoint(
+                x: .random(in: 0.25...0.75),
+                y: .random(in: 0.55...0.85))
+            burst.rotation = .random(in: -35...35)
+            burst.rise = .random(in: 26...54)
+            burst.symbol = symbols.randomElement() ?? "music.note"
+            spawned.append(burst)
+        }
+        notes.append(contentsOf: spawned)
+        let ids = Set(spawned.map { $0.id })
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            notes = notes.map { n in
+                var copy = n
+                if ids.contains(n.id) { copy.animate = true }
+                return copy
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            notes.removeAll { ids.contains($0.id) }
         }
     }
 
@@ -647,15 +946,7 @@ struct MusicVisualizerSettings: View {
     @Default(.musicVisualizerSplit) private var split
     @Default(.musicVisualizerColorSource) private var colorSource
     @Default(.musicVisualizerCustomColor) private var customColorHex
-    @Default(.musicVisualizerCustomImage) private var customImageName
     @Default(.musicVisualizerSensitivity) private var sensitivity
-
-    @State private var isImporting = false
-    @State private var importError: String?
-
-    private var usesCustomGraphic: Bool {
-        leftStyle == .custom || (split && rightStyle == .custom)
-    }
 
     private var usesAudio: Bool {
         leftStyle.needsAudio || (split && rightStyle.needsAudio)
@@ -680,10 +971,6 @@ struct MusicVisualizerSettings: View {
                             Label(style.title, systemImage: style.symbolName).tag(style)
                         }
                     }
-                }
-
-                if usesCustomGraphic {
-                    customGraphicControls
                 }
 
                 Picker("Colour", selection: $colorSource) {
@@ -714,60 +1001,6 @@ struct MusicVisualizerSettings: View {
                     audioStatusRow
                 }
             }
-        }
-        .fileImporter(
-            isPresented: $isImporting,
-            allowedContentTypes: [.image],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case let .success(urls):
-                guard let url = urls.first else { return }
-                do {
-                    let name = try CustomVisualizerStore.importImage(from: url)
-                    if !customImageName.isEmpty {
-                        CustomVisualizerStore.remove(named: customImageName)
-                    }
-                    customImageName = name
-                    importError = nil
-                } catch {
-                    importError = error.localizedDescription
-                }
-            case let .failure(error):
-                importError = error.localizedDescription
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var customGraphicControls: some View {
-        HStack {
-            if let image = CustomVisualizerStore.image(named: customImageName) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
-                    .padding(4)
-                    .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
-            }
-            Button(customImageName.isEmpty ? "Choose image…" : "Replace image…") {
-                isImporting = true
-            }
-            Spacer()
-            if !customImageName.isEmpty {
-                Button("Remove") {
-                    CustomVisualizerStore.remove(named: customImageName)
-                    customImageName = ""
-                }
-            }
-        }
-        Text("PNG or SVG works best as a single-colour silhouette. The image pulses with the beat and glows in the colour above.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        if let importError {
-            Text(importError)
-                .font(.caption)
-                .foregroundStyle(.red)
         }
     }
 
@@ -813,3 +1046,19 @@ private struct VisualizerAudioStatusRow: View {
     }
 }
 
+// MARK: - Note burst view
+
+struct NoteView: View {
+    let color: Color
+    let rotation: Double
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(color)
+            .shadow(color: color.opacity(0.7), radius: 3)
+            .rotationEffect(.degrees(rotation))
+            .allowsHitTesting(false)
+    }
+}

@@ -175,6 +175,8 @@ extension Defaults.Keys {
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
     static let lyricsGlow = Key<Bool>("lyricsGlow", default: true)
+    static let lyricsGlowColorData = Key<Data?>("lyricsGlowColorData", default: nil)
+    static let lyricsGlowStrength = Key<Double>("lyricsGlowStrength", default: 2.0)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",
         default: MusicControlButton.defaultLayout

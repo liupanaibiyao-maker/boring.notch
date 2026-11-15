@@ -640,6 +640,9 @@ struct Media: View {
     @Default(.sneakPeekStyles) var sneakPeekStyles
 
     @Default(.enableLyrics) var enableLyrics
+    @Default(.lyricsGlow) private var lyricsGlow
+    @Default(.lyricsGlowColorData) private var lyricsGlowColorData
+    @Default(.lyricsGlowStrength) private var lyricsGlowStrength
 
     var body: some View {
         Form {
@@ -728,6 +731,37 @@ struct Media: View {
                 if enableLyrics {
                     Defaults.Toggle(key: .lyricsGlow) {
                         Text("Glow effect on lyrics")
+                    }
+                    if lyricsGlow {
+                        HStack {
+                            Text("Glow color")
+                            Spacer()
+                            ColorPicker("", selection: Binding(
+                                get: {
+                                    if let data = lyricsGlowColorData,
+                                       let color = try? NSKeyedUnarchiver.unarchivedObject(
+                                            ofClass: NSColor.self, from: data) {
+                                        return Color(nsColor: color)
+                                    }
+                                    return .effectiveAccent
+                                },
+                                set: { newColor in
+                                    let nsColor = NSColor(newColor)
+                                    if let data = try? NSKeyedArchiver.archivedData(
+                                            withRootObject: nsColor, requiringSecureCoding: false) {
+                                        lyricsGlowColorData = data
+                                    }
+                                }
+                            ), supportsOpacity: false)
+                            .labelsHidden()
+                        }
+                        HStack {
+                            Text("Glow strength")
+                            Slider(value: $lyricsGlowStrength, in: 0.3...4.0)
+                            Text(String(format: "%.1f×", lyricsGlowStrength))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
                     }
                 }
             } header: {

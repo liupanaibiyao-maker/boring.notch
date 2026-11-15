@@ -1,0 +1,61 @@
+{
+  "images": [
+    {
+      "filename": "coffee-frame-0.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-1.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-2.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-3.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-4.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-5.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-6.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-7.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-8.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "coffee-frame-9.png",
+      "idiom": "mac",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "template-rendering-intent": "template"
+  }
+}
