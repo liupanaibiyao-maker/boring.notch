@@ -725,6 +725,11 @@ struct Media: View {
                         customBadge(text: "Beta")
                     }
                 }
+                if enableLyrics {
+                    Defaults.Toggle(key: .lyricsGlow) {
+                        Text("Glow effect on lyrics")
+                    }
+                }
             } header: {
                 Text("Media controls")
             }  footer: {
@@ -1261,6 +1266,12 @@ struct Appearance: View {
                 }
             } header: {
                 Text("Media")
+            }
+
+            Section {
+                MusicVisualizerSettings()
+            } header: {
+                Text("Player corner visualizer")
             }
 
             Section {

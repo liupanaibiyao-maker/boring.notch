@@ -30,6 +30,23 @@ struct MusicPlayerView: View {
             MusicToolbarView()
                 .padding(.bottom, 6)
         }
+        .overlay(alignment: .bottomLeading) {
+            MusicVisualizerSlot(side: .left, isVisible: vm.notchState == .open)
+                .frame(width: visualizerSize.width, height: visualizerSize.height)
+                .padding(.leading, 4)
+                .padding(.bottom, 2)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            MusicVisualizerSlot(side: .right, isVisible: vm.notchState == .open)
+                .frame(width: visualizerSize.width, height: visualizerSize.height)
+                .padding(.trailing, 4)
+                .padding(.bottom, 2)
+        }
+    }
+
+    private var visualizerSize: CGSize {
+        let width = albumArtSize
+        return CGSize(width: width, height: max(44, width * 0.55))
     }
 
     /// Album art stays square and scales with the available open-notch
@@ -132,6 +149,7 @@ struct AlbumArtView: View {
 struct MusicControlsView: View {
     @ObservedObject var musicManager = MusicManager.shared
         @EnvironmentObject var vm: BoringViewModel
+    @Default(.lyricsGlow) private var lyricsGlow
     @State private var sliderValue: Double = 0
     @State private var dragging: Bool = false
     @State private var lastDragged: Date = .distantPast
@@ -205,6 +223,14 @@ struct MusicControlsView: View {
                 .multilineTextAlignment(.center)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .shadow(
+                    color: Color.effectiveAccent.opacity(lyricsGlow ? 0.65 : 0),
+                    radius: lyricsGlow ? 5 : 0
+                )
+                .shadow(
+                    color: Color.effectiveAccent.opacity(lyricsGlow ? 0.35 : 0),
+                    radius: lyricsGlow ? 11 : 0
+                )
                 .offset(x: -toolbarCenterOffset)
                 .opacity(musicManager.isPlaying ? 1 : 0)
                 .transition(.opacity)

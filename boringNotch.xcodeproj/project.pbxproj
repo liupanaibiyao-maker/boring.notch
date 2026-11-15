@@ -73,6 +73,8 @@
 		11F748692EC9AC9600F841DB /* XPCHelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F748662EC9AC9600F841DB /* XPCHelperClient.swift */; };
 		11F748732EC9DA9300F841DB /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = 11F748722EC9DA9300F841DB /* Lottie */; };
 		11F748822ECB07A400F841DB /* MusicControlButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F748812ECB07A400F841DB /* MusicControlButton.swift */; };
+		A1B2C3D52ECF000100A1B2C3 /* AudioSpectrumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D42ECF000100A1B2C3 /* AudioSpectrumManager.swift */; };
+		A1B2C3D72ECF000100A1B2C3 /* NotchMusicVisualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D62ECF000100A1B2C3 /* NotchMusicVisualizer.swift */; };
 		11F748842ECB27DC00F841DB /* MusicSlotConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F748832ECB27DC00F841DB /* MusicSlotConfigurationView.swift */; };
 		14288DDC2C6E015000B9F80C /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14288DD62C6E015000B9F80C /* AudioPlayer.swift */; };
 		14288DE82C6E01C800B9F80C /* ProgressIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14288DE72C6E01C800B9F80C /* ProgressIndicator.swift */; };
@@ -240,6 +242,8 @@
 		11F748652EC9AC9600F841DB /* BoringNotchXPCHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringNotchXPCHelperProtocol.swift; sourceTree = "<group>"; };
 		11F748662EC9AC9600F841DB /* XPCHelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCHelperClient.swift; sourceTree = "<group>"; };
 		11F748812ECB07A400F841DB /* MusicControlButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicControlButton.swift; sourceTree = "<group>"; };
+		A1B2C3D42ECF000100A1B2C3 /* AudioSpectrumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSpectrumManager.swift; sourceTree = "<group>"; };
+		A1B2C3D62ECF000100A1B2C3 /* NotchMusicVisualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchMusicVisualizer.swift; sourceTree = "<group>"; };
 		11F748832ECB27DC00F841DB /* MusicSlotConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicSlotConfigurationView.swift; sourceTree = "<group>"; };
 		14288DD62C6E015000B9F80C /* AudioPlayer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		14288DE72C6E01C800B9F80C /* ProgressIndicator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ProgressIndicator.swift; sourceTree = "<group>"; };
@@ -514,6 +518,7 @@
 				F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */,
 				112FB7342CCF16F70015238C /* NotchSpaceManager.swift */,
 				147163992C5D35FF0068B555 /* MusicManager.swift */,
+				A1B2C3D42ECF000100A1B2C3 /* AudioSpectrumManager.swift */,
 				149E0B962C737D00006418B1 /* WebcamManager.swift */,
 				14C08BB52C8DE42D000F8AA0 /* CalendarManager.swift */,
 				B1F0A0012E60000100000001 /* BrightnessManager.swift */,
@@ -697,6 +702,7 @@
 			children = (
 				B19424082CD0FEFE003E5DC2 /* LottieAnimationView.swift */,
 				147163972C5D35B70068B555 /* MusicVisualizer.swift */,
+				A1B2C3D62ECF000100A1B2C3 /* NotchMusicVisualizer.swift */,
 			);
 			path = Music;
 			sourceTree = "<group>";
@@ -910,6 +916,8 @@
 				5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */,
 				1100292A2E8691B400035A57 /* FileShareView.swift in Sources */,
 				147163982C5D35B70068B555 /* MusicVisualizer.swift in Sources */,
+				A1B2C3D52ECF000100A1B2C3 /* AudioSpectrumManager.swift in Sources */,
+				A1B2C3D72ECF000100A1B2C3 /* NotchMusicVisualizer.swift in Sources */,
 				11CC44A22CEE614100C7244B /* BoringViewCoordinator.swift in Sources */,
 				B186543C2C6F49AE000B926A /* ShortcutConstants.swift in Sources */,
 				11A45C792E34E63100CEB175 /* MediaChecker.swift in Sources */,
@@ -1240,6 +1248,7 @@
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This app uses AppleEvents to control music";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "boringNotch reads the system audio spectrum so the player visualizer can follow the music that is actually playing.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "This app uses the calendar to display your calendar events";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to display a live camera view";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -1294,6 +1303,7 @@
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This app uses AppleEvents to control music";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "boringNotch reads the system audio spectrum so the player visualizer can follow the music that is actually playing.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "This app uses the calendar to display your calendar events";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to display a live camera view";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

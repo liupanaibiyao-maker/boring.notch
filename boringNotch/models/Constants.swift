@@ -174,6 +174,7 @@ extension Defaults.Keys {
     static let waitInterval = Key<Double>("waitInterval", default: 3)
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
+    static let lyricsGlow = Key<Bool>("lyricsGlow", default: true)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",
         default: MusicControlButton.defaultLayout
@@ -182,6 +183,24 @@ extension Defaults.Keys {
         "musicControlSlotLimit",
         default: MusicControlButton.defaultLayout.count
     )
+
+    // MARK: Music visualizer slots
+    static let musicVisualizerEnabled = Key<Bool>(
+        "musicVisualizerEnabled", default: true)
+    static let musicVisualizerStyleLeft = Key<MusicVisualizerStyle>(
+        "musicVisualizerStyleLeft", default: .glow)
+    static let musicVisualizerStyleRight = Key<MusicVisualizerStyle>(
+        "musicVisualizerStyleRight", default: .glow)
+    static let musicVisualizerSplit = Key<Bool>(
+        "musicVisualizerSplit", default: false)
+    static let musicVisualizerColorSource = Key<VisualizerColorSource>(
+        "musicVisualizerColorSource", default: .albumArt)
+    static let musicVisualizerCustomColor = Key<String>(
+        "musicVisualizerCustomColor", default: "#7AD7FF")
+    static let musicVisualizerCustomImage = Key<String>(
+        "musicVisualizerCustomImage", default: "")
+    static let musicVisualizerSensitivity = Key<Double>(
+        "musicVisualizerSensitivity", default: 1.0)
     
     // MARK: Battery
     static let showPowerStatusNotifications = Key<Bool>("showPowerStatusNotifications", default: true)
