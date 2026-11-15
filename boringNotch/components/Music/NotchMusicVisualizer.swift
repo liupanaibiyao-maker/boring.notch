@@ -27,7 +27,7 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
 
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .off: return "Off"
         case .glow: return "Album glow"
@@ -41,7 +41,7 @@ enum MusicVisualizerStyle: String, CaseIterable, Identifiable, Defaults.Serializ
         }
     }
 
-    var summary: String {
+    var summary: LocalizedStringKey {
         switch self {
         case .off: return "Both corners stay pure black."
         case .glow: return "Soft light in the album's own colour, breathing with the beat."
@@ -85,7 +85,7 @@ enum VisualizerColorSource: String, CaseIterable, Identifiable, Defaults.Seriali
 
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .albumArt: return "Album art"
         case .custom: return "Custom"

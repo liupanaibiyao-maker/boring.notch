@@ -216,24 +216,32 @@ struct MusicControlsView: View {
                 let v = scalar.value
                 return v >= 0x0600 && v <= 0x06FF
             }
-            Text(LocalizedStringKey(line))
-                .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
-                .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .shadow(
-                    color: Color.effectiveAccent.opacity(lyricsGlow ? 0.65 : 0),
-                    radius: lyricsGlow ? 5 : 0
-                )
-                .shadow(
-                    color: Color.effectiveAccent.opacity(lyricsGlow ? 0.35 : 0),
-                    radius: lyricsGlow ? 11 : 0
-                )
-                .offset(x: -toolbarCenterOffset)
-                .opacity(musicManager.isPlaying ? 1 : 0)
-                .transition(.opacity)
+            if lyricsGlow {
+                Text(LocalizedStringKey(line))
+                    .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
+                    .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .shadow(color: Color.effectiveAccent.opacity(0.9), radius: 6)
+                    .shadow(color: Color.effectiveAccent.opacity(0.55), radius: 14)
+                    .shadow(color: Color.effectiveAccent.opacity(0.3), radius: 24)
+                    .offset(x: -toolbarCenterOffset)
+                    .opacity(musicManager.isPlaying ? 1 : 0)
+                    .transition(.opacity)
+            } else {
+                Text(LocalizedStringKey(line))
+                    .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
+                    .foregroundColor(musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .offset(x: -toolbarCenterOffset)
+                    .opacity(musicManager.isPlaying ? 1 : 0)
+                    .transition(.opacity)
+            }
         }
     }
 
