@@ -1032,10 +1032,6 @@ struct MusicVisualizerSettings: View {
     @Default(.musicVisualizerCustomColor) private var customColorHex
     @Default(.musicVisualizerSensitivity) private var sensitivity
 
-    private var usesAudio: Bool {
-        leftStyle.needsAudio
-    }
-
     var body: some View {
         Group {
             Toggle("Show visualizer in player corners", isOn: $enabled)
@@ -1093,10 +1089,6 @@ struct MusicVisualizerSettings: View {
                     Text(String(format: "%.1f×", sensitivity))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                }
-
-                if usesAudio {
-                    audioStatusRow
                 }
             }
         }
@@ -1188,47 +1180,6 @@ struct MusicVisualizerSettings: View {
             return AnyShapeStyle(Color(hex: customColorHex) ?? .white)
         case .white:
             return AnyShapeStyle(Color.white)
-        }
-    }
-
-    @ViewBuilder
-    private var audioStatusRow: some View {
-        VisualizerAudioStatusRow()
-    }
-}
-
-/// Observes the live spectrum only inside this small row, so an open settings
-/// window does not invalidate the whole form at the spectrum's publish rate.
-private struct VisualizerAudioStatusRow: View {
-    @ObservedObject private var spectrum = AudioSpectrumManager.shared
-
-    var body: some View {
-        HStack {
-            Image(systemName: spectrum.isSimulated ? "waveform.slash" : "waveform")
-                .foregroundStyle(spectrum.isSimulated ? .orange : .green)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(spectrum.isSimulated ? "Simulated rhythm" : "Live system audio")
-                Text(spectrum.isSimulated
-                     ? "Allow boringNotch under Privacy & Security → Audio Recording to react to the real music."
-                     : "The spectrum follows what is actually playing.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Retry") { spectrum.retry() }
-            Button("Privacy Settings") { openAudioPrivacySettings() }
-        }
-    }
-
-    private func openAudioPrivacySettings() {
-        let candidates = [
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioRecording",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
-        ]
-        for candidate in candidates {
-            if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
-                return
-            }
         }
     }
 }
